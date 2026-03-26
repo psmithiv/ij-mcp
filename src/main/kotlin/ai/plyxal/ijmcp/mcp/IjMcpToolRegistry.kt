@@ -8,11 +8,20 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 internal class IjMcpToolRegistry(
-    private val handlers: List<IjMcpToolHandler> = IjMcpToolCatalog.descriptors.map(::IjMcpPlaceholderToolHandler),
+    handlers: List<IjMcpToolHandler> = emptyList(),
 ) {
-    private val handlersByName = handlers.associateBy { it.descriptor.name }
+    private val handlersByName = buildMap {
+        val customHandlers = handlers.associateBy { it.descriptor.name }
 
-    fun list(): List<IjMcpToolDescriptor> = handlers.map(IjMcpToolHandler::descriptor)
+        IjMcpToolCatalog.descriptors.forEach { descriptor ->
+            put(
+                descriptor.name,
+                customHandlers[descriptor.name] ?: IjMcpPlaceholderToolHandler(descriptor),
+            )
+        }
+    }
+
+    fun list(): List<IjMcpToolDescriptor> = IjMcpToolCatalog.descriptors
 
     fun find(name: String): IjMcpToolHandler? = handlersByName[name]
 }
@@ -36,6 +45,8 @@ internal class IjMcpPlaceholderToolHandler(
 }
 
 internal object IjMcpToolCatalog {
+    private val descriptorsByName: MutableMap<String, IjMcpToolDescriptor> = linkedMapOf()
+
     val descriptors: List<IjMcpToolDescriptor> by lazy {
         listOf(
             toolDescriptor(
@@ -309,7 +320,11 @@ internal object IjMcpToolCatalog {
                 idempotentHint = true,
             ),
         )
+            .onEach { descriptor -> descriptorsByName[descriptor.name] = descriptor }
     }
+
+    fun descriptor(name: String): IjMcpToolDescriptor = descriptorsByName[name]
+        ?: descriptors.first { it.name == name }
 
     private fun toolDescriptor(
         name: String,
