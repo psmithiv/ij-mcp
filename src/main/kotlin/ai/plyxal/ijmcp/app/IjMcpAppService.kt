@@ -1,6 +1,7 @@
 package ai.plyxal.ijmcp.app
 
 import ai.plyxal.ijmcp.ide.IjMcpNavigationToolHandlers
+import ai.plyxal.ijmcp.ide.IjMcpSearchToolHandlers
 import ai.plyxal.ijmcp.mcp.IjMcpHttpServer
 import ai.plyxal.ijmcp.mcp.IjMcpProtocol
 import ai.plyxal.ijmcp.mcp.IjMcpRequestRouter
@@ -27,7 +28,7 @@ class IjMcpAppService : Disposable {
     private val server = IjMcpHttpServer(
         IjMcpRequestRouter(
             IjMcpToolRegistry(
-                handlers = IjMcpNavigationToolHandlers().all(),
+                handlers = IjMcpNavigationToolHandlers().all() + IjMcpSearchToolHandlers().all(),
             ),
         ),
     )
