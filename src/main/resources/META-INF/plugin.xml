@@ -6,5 +6,10 @@
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable
+                id="ai.plyxal.ijmcp.settings"
+                displayName="IJ-MCP"
+                instance="ai.plyxal.ijmcp.settings.IjMcpSettingsConfigurable"/>
+        <postStartupActivity implementation="ai.plyxal.ijmcp.app.IjMcpProjectStartupActivity"/>
     </extensions>
 </idea-plugin>

@@ -1,9 +1,8 @@
 package ai.plyxal.ijmcp.settings
 
-/**
- * Placeholder settings shape for the initial scaffold.
- */
+import ai.plyxal.ijmcp.mcp.IjMcpProtocol
+
 data class IjMcpSettingsState(
-    val enabled: Boolean = false,
-    val port: Int = 8765,
+    var enabled: Boolean = false,
+    var port: Int = IjMcpProtocol.defaultPort,
 )
