@@ -33,13 +33,17 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 
     intellijPlatform {
-        intellijIdea(providers.gradleProperty("platformVersion"))
+        intellijIdeaCommunity(providers.gradleProperty("platformVersion"))
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',').filter(String::isNotBlank) })
         testFramework(TestFrameworkType.Platform)
     }
 }
 
 intellijPlatform {
+    // Use a regular local IDE dev instance; split mode is for remote-development flows
+    // and produces a broken frontend/backend startup shape for this plugin project.
+    splitMode = false
+
     pluginConfiguration {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
