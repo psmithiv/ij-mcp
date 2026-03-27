@@ -9,6 +9,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import kotlinx.serialization.json.JsonObject
@@ -18,7 +19,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 internal class IjMcpNavigationToolHandlers(
-    private val projectResolver: IjMcpProjectResolver = IjMcpProjectResolver(),
+    private val project: Project,
     private val pathResolver: IjMcpPathResolver = IjMcpPathResolver(),
 ) {
     fun all(): List<IjMcpToolHandler> = listOf(
@@ -33,9 +34,9 @@ internal class IjMcpNavigationToolHandlers(
     private inner class OpenFileToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("open_file")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val path = arguments.stringValue("path")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty path is required.",
                 )
@@ -44,14 +45,14 @@ internal class IjMcpNavigationToolHandlers(
             val column = arguments.intValue("column")
 
             if (column != null && line == null) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A column cannot be supplied without a line.",
                 )
             }
 
             if ((line != null && line < 1) || (column != null && column < 1)) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "Line and column values must be 1-based positive integers.",
                 )
@@ -59,7 +60,7 @@ internal class IjMcpNavigationToolHandlers(
 
             val resolvedFile = when (val resolution = resolveNavigationFile(project, path)) {
                 is ResolvedNavigationFile.Success -> resolution.resolvedFile
-                is ResolvedNavigationFile.Failure -> return@withActiveProject resolution.errorResult
+                is ResolvedNavigationFile.Failure -> return@withProject resolution.errorResult
             }
 
             var wasOpen = false
@@ -109,16 +110,16 @@ internal class IjMcpNavigationToolHandlers(
     private inner class FocusTabToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("focus_tab")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val path = arguments.stringValue("path")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty path is required.",
                 )
 
             val resolvedFile = when (val resolution = resolveNavigationFile(project, path)) {
                 is ResolvedNavigationFile.Success -> resolution.resolvedFile
-                is ResolvedNavigationFile.Failure -> return@withActiveProject resolution.errorResult
+                is ResolvedNavigationFile.Failure -> return@withProject resolution.errorResult
             }
             var isOpen = false
 
@@ -131,7 +132,7 @@ internal class IjMcpNavigationToolHandlers(
             }
 
             if (!isOpen) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "tab_not_open",
                     message = "The requested file is not currently open in an editor tab.",
                 )
@@ -153,7 +154,7 @@ internal class IjMcpNavigationToolHandlers(
     private inner class ListOpenTabsToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("list_open_tabs")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val tabs = mutableListOf<IjMcpResolvedFile>()
             var activePath: String? = null
 
@@ -205,16 +206,16 @@ internal class IjMcpNavigationToolHandlers(
     private inner class CloseTabToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("close_tab")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val path = arguments.stringValue("path")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty path is required.",
                 )
 
             val resolvedFile = when (val resolution = resolveNavigationFile(project, path)) {
                 is ResolvedNavigationFile.Success -> resolution.resolvedFile
-                is ResolvedNavigationFile.Failure -> return@withActiveProject resolution.errorResult
+                is ResolvedNavigationFile.Failure -> return@withProject resolution.errorResult
             }
             var wasClosed = false
 
@@ -227,7 +228,7 @@ internal class IjMcpNavigationToolHandlers(
             }
 
             if (!wasClosed) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "tab_not_open",
                     message = "The requested file is not currently open in an editor tab.",
                 )
@@ -250,16 +251,16 @@ internal class IjMcpNavigationToolHandlers(
     private inner class RevealFileInProjectToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("reveal_file_in_project")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val path = arguments.stringValue("path")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty path is required.",
                 )
 
             val resolvedFile = when (val resolution = resolveNavigationFile(project, path)) {
                 is ResolvedNavigationFile.Success -> resolution.resolvedFile
-                is ResolvedNavigationFile.Failure -> return@withActiveProject resolution.errorResult
+                is ResolvedNavigationFile.Failure -> return@withProject resolution.errorResult
             }
             var revealed = false
 
@@ -272,7 +273,7 @@ internal class IjMcpNavigationToolHandlers(
             }
 
             if (!revealed) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "internal_error",
                     message = "The file could not be revealed in the Project view.",
                 )
@@ -295,7 +296,7 @@ internal class IjMcpNavigationToolHandlers(
     private inner class GetActiveEditorContextToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("get_active_editor_context")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             var activeFile: VirtualFile? = null
             var caretLine = 1
             var caretColumn = 1
@@ -328,7 +329,7 @@ internal class IjMcpNavigationToolHandlers(
             }
 
             val file = activeFile
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "no_active_editor",
                     message = "No active editor is available for the current project.",
                 )
@@ -336,7 +337,7 @@ internal class IjMcpNavigationToolHandlers(
             val resolvedFile = when (val result = pathResolver.describe(project, file)) {
                 is IjMcpResolvedFileResult.Success -> result.resolvedFile
                 is IjMcpResolvedFileResult.Failure -> {
-                    return@withActiveProject IjMcpToolResults.error(
+                    return@withProject IjMcpToolResults.error(
                         errorCode = result.errorCode,
                         message = result.message,
                     )
@@ -375,28 +376,20 @@ internal class IjMcpNavigationToolHandlers(
         }
     }
 
-    private fun withActiveProject(
-        action: (project: com.intellij.openapi.project.Project) -> IjMcpToolCallResult,
-    ): IjMcpToolCallResult = when (val projectResolution = projectResolver.resolveActiveProject()) {
-            is IjMcpProjectResolution.Success -> action(projectResolution.project)
-            is IjMcpProjectResolution.Failure -> IjMcpToolResults.error(
-                errorCode = projectResolution.errorCode,
-                message = projectResolution.message,
-            )
-        }
+    private fun withProject(action: (project: Project) -> IjMcpToolCallResult): IjMcpToolCallResult = action(project)
 
     private fun resolveNavigationFile(
-        project: com.intellij.openapi.project.Project,
+        project: Project,
         path: String,
     ): ResolvedNavigationFile = when (val fileResult = pathResolver.resolveFile(project, path)) {
-            is IjMcpResolvedFileResult.Success -> ResolvedNavigationFile.Success(fileResult.resolvedFile)
-            is IjMcpResolvedFileResult.Failure -> ResolvedNavigationFile.Failure(
-                IjMcpToolResults.error(
-                    errorCode = fileResult.errorCode,
-                    message = fileResult.message,
-                ),
-            )
-        }
+        is IjMcpResolvedFileResult.Success -> ResolvedNavigationFile.Success(fileResult.resolvedFile)
+        is IjMcpResolvedFileResult.Failure -> ResolvedNavigationFile.Failure(
+            IjMcpToolResults.error(
+                errorCode = fileResult.errorCode,
+                message = fileResult.message,
+            ),
+        )
+    }
 
     private fun JsonObject.stringValue(name: String): String? = (this[name] as? JsonPrimitive)
         ?.content
