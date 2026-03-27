@@ -1,12 +1,12 @@
 # Manual Smoke Verification
 
-This checklist verifies the current `IJ-MCP` v1 surface against the documented transport and tool contract.
+This checklist verifies the current multi-target IJ-MCP flow: one MCP target per project window, local registry discovery, pair-once authentication, sticky CLI selection, and MCP tool routing through the selected target.
 
 ## Prerequisites
 
 * Java 21+
 * IntelliJ IDEA 2025.2-compatible runtime
-* a local shell with `curl`
+* a local shell
 
 ## 1. Launch the plugin sandbox
 
@@ -16,133 +16,142 @@ From the repo root:
 ./gradlew runIde
 ```
 
-In the sandbox IDE, open a project you want to drive through MCP.
+Open two project windows in the sandbox IDE if you want to verify multi-window behavior.
 
-## 2. Configure the local server
+## 2. Enable IJ-MCP and inspect target state
+
+In each window:
 
 1. Open IntelliJ `Settings` and search for `IJ-MCP`.
 2. Check `Enable local MCP server`.
-3. Leave the port at `8765` unless you need a different loopback port.
-4. Click `Generate Token`.
-5. Copy the staged token before clicking `Apply`.
-6. Click `Apply` and confirm the status reads `Running at http://127.0.0.1:8765/mcp`.
+3. Leave the preferred port at `8765` unless you are intentionally testing fallback behavior.
+4. Click `Apply`.
+5. Confirm the settings page shows:
+   * a running endpoint for the selected target
+   * the current `targetId`
+   * the project name and path
+   * registry diagnostics for that target
 
-For the shell examples below, export the values you configured:
+Expected result:
+
+* each project window is listed as its own target in the settings UI
+* the selected target shows `Pairing status: pairing required`
+* the endpoint is bound to `127.0.0.1`
+
+## 3. Verify target discovery and sticky selection
+
+List all discovered targets:
 
 ```bash
-export IJMCP_PORT=8765
-export IJMCP_TOKEN='<copied-token>'
+./gradlew :cli:run --args='targets list'
 ```
 
-## 3. Verify lifecycle and discovery
-
-Initialize:
+Select one target:
 
 ```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+./gradlew :cli:run --args='targets select <targetId>'
 ```
 
-List tools:
+Read the sticky selection back:
 
 ```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+./gradlew :cli:run --args='targets current'
 ```
 
 Expected result:
 
-* `initialize` returns `protocolVersion` `2025-11-25`
-* `tools/list` returns all 8 v1 tools
+* `targets list` shows one line per active project-window target
+* the selected target is marked with `*`
+* `targets current` returns the selected target identity and endpoint
 
-## 4. Verify navigation tools
+## 4. Pair the CLI with the selected target
 
-Open a file:
+In the IJ-MCP settings page for the selected target:
 
-```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"open_file","arguments":{"path":"src/main/kotlin/ai/plyxal/ijmcp/app/IjMcpAppService.kt","line":1,"column":1}}}'
-```
+1. Click `Pair CLI`.
+2. Copy the one-time pairing code.
 
-Read active editor context:
+In the shell:
 
 ```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_active_editor_context","arguments":{}}}'
-```
-
-List tabs:
-
-```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_open_tabs","arguments":{}}}'
-```
-
-## 5. Verify search tools
-
-Search files:
-
-```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"search_files","arguments":{"query":"IjMcpAppService.kt","limit":5}}}'
-```
-
-Search symbols:
-
-```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"search_symbols","arguments":{"query":"applyConfiguredState","limit":5}}}'
+./gradlew :cli:run --args='targets pair --code <pairingCode>'
 ```
 
 Expected result:
 
-* both calls return JSON-RPC success payloads
-* successful search results include `structuredContent.results`
-* misses return `result.isError: true` with `file_not_found` or `symbol_not_found`
+* the CLI prints `Paired target ...`
+* `targets current` still points at the same target
+* `targets list` shows the selected target as `paired`
 
-## 6. Verify fail-closed behavior
+## 5. Verify MCP routing through the sticky target
 
-Missing token should return HTTP `401`:
+List tools through the CLI:
 
 ```bash
-curl -i "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":8,"method":"initialize","params":{}}'
+./gradlew :cli:run --args='mcp tools-list'
 ```
 
-Outside-project file access should return a tool error:
+Call a navigation tool:
 
 ```bash
-curl -s "http://127.0.0.1:${IJMCP_PORT}/mcp" \
-  -H "Authorization: Bearer ${IJMCP_TOKEN}" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"open_file","arguments":{"path":"/tmp/outside-project.txt"}}}'
+./gradlew :cli:run --args='mcp call open_file {"path":"README.md","line":1,"column":1}'
+```
+
+Call a search tool:
+
+```bash
+./gradlew :cli:run --args='mcp call search_files {"query":"IjMcpCli.kt","limit":5}'
 ```
 
 Expected result:
 
-* `structuredContent.status` is `error`
-* `structuredContent.errorCode` is `outside_project` if the file exists outside the project, or `file_not_found` if it does not exist
+* `mcp tools-list` returns the 8 documented tools
+* `mcp call` returns JSON-RPC success payloads with `structuredContent`
+* the action occurs in the selected project window, not in another open IDE window
 
-If multiple IntelliJ projects are open, project-scoped tools should fail closed with `ambiguous_project`.
+## 6. Verify multi-target switching
+
+If more than one target is available:
+
+1. Select a different target with `targets select <targetId>`.
+2. Pair it if needed with a new one-time pairing code.
+3. Run `mcp call get_active_editor_context`.
+
+Expected result:
+
+* the CLI now talks only to the newly selected target
+* no implicit fallback occurs to the previously selected target
+
+## 7. Verify credential reset and recovery
+
+In the IJ-MCP settings page for the selected target:
+
+1. Click `Reset Pairing`.
+
+In the shell:
+
+```bash
+./gradlew :cli:run --args='mcp tools-list'
+```
+
+Expected result:
+
+* the request fails clearly with a message that the target should be re-paired
+* no other available target is used automatically
+
+Re-pair with a fresh code and confirm `mcp tools-list` succeeds again.
+
+## 8. Verify stale-target recovery
+
+1. Close the selected project window or stop the target from the IDE.
+2. Run:
+
+```bash
+./gradlew :cli:run --args='mcp tools-list'
+```
+
+Expected result:
+
+* the CLI fails with an unavailable or unreachable target message
+* the CLI tells you to run `targets list` and `targets select <targetId>`
+* the CLI does not silently switch to another target

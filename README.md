@@ -1,15 +1,17 @@
 # IJ-MCP
 
 <!-- Plugin description -->
-**IJ-MCP** is an IntelliJ IDEA plugin that exposes a local MCP server so a CLI agent can control safe IDE navigation and search workflows.
+**IJ-MCP** is an IntelliJ IDEA plugin plus local CLI that expose safe, project-window-scoped MCP targets for IDE navigation and search workflows.
 
 The current repository state includes:
 
-* Streamable HTTP MCP transport bound to loopback with bearer-token auth
-* persisted plugin settings and secure token storage
+* one loopback MCP endpoint per open IntelliJ project window
+* local target discovery through `~/.ij-mcp/targets.json`
+* pair-once authentication with target-scoped credentials
+* a local CLI for sticky target selection, pairing, and MCP request routing
 * IntelliJ-backed navigation tools for files, tabs, project reveal, and active editor context
 * IntelliJ-backed file and symbol search tools with project-scope enforcement
-* automated tests for transport behavior and project-scoped search/path verification
+* automated tests for transport behavior, registry updates, auth isolation, and project-scoped search/path verification
 <!-- Plugin description end -->
 
 ## Development
@@ -24,25 +26,46 @@ Useful commands:
 ./gradlew buildPlugin
 ./gradlew runIde
 ./gradlew test
+./gradlew :cli:installDist
+./gradlew :cli:run --args='help'
 ```
 
 ## Repository Status
 
 The v1 implementation currently covers:
 
+* one MCP target per IntelliJ project window
+* local registry discovery and sticky CLI target selection
+* pair-once authentication with per-target bearer tokens
 * MCP lifecycle and `tools/list` / `tools/call`
-* local server settings and token management
 * `open_file`, `focus_tab`, `list_open_tabs`, `close_tab`, `reveal_file_in_project`, and `get_active_editor_context`
 * `search_files` and `search_symbols`
-* fail-closed behavior for missing auth, ambiguous project selection, and outside-project file access
+* fail-closed behavior for missing auth, stale target selection, and outside-project file access
+
+## CLI
+
+The repo now includes a dedicated `cli` subproject for local target discovery and MCP routing.
+
+Supported commands:
+
+```bash
+./gradlew :cli:run --args='targets list'
+./gradlew :cli:run --args='targets current'
+./gradlew :cli:run --args='targets select <targetId>'
+./gradlew :cli:run --args='targets pair --code <pairingCode> [targetId]'
+./gradlew :cli:run --args='targets forget [targetId]'
+./gradlew :cli:run --args='mcp tools-list'
+./gradlew :cli:run --args='mcp call <toolName> [jsonArguments]'
+```
 
 ## Verification
 
 Automated verification:
 
 ```bash
-./gradlew test buildPlugin
+./gradlew :cli:test :cli:installDist test buildPlugin
 ./gradlew runIde --dry-run
+./gradlew :cli:run --args='help'
 ```
 
 Manual verification:
@@ -58,6 +81,8 @@ src/main/kotlin/ai/plyxal/ijmcp/
   mcp/
   model/
   settings/
+
+cli/src/main/kotlin/ai/plyxal/ijmcp/cli/
 
 src/main/resources/META-INF/
   plugin.xml

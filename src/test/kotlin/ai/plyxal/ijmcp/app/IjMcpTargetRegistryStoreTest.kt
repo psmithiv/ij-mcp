@@ -34,6 +34,29 @@ class IjMcpTargetRegistryStoreTest {
     }
 
     @Test
+    fun multiWindowTargetsAreTrackedIndependently() {
+        val registryRoot = Files.createTempDirectory("ijmcp-registry-multi-window")
+        val clock = RegistryTestClock(Instant.parse("2026-03-27T20:00:00Z"))
+        val store = IjMcpTargetRegistryStore(registryRoot = registryRoot, clock = clock)
+
+        store.upsert(sampleStatus("target-a", 9001, "Project A", "/tmp/project-a"))
+        store.upsert(sampleStatus("target-b", 9002, "Project B", "/tmp/project-b"))
+        store.upsert(sampleStatus("target-a", 9011, "Project A", "/tmp/project-a"))
+
+        val registrations = store.readTargets()
+
+        assertEquals(2, registrations.size)
+        assertEquals(9011, registrations.first { it.targetId == "target-a" }.port)
+        assertEquals(9002, registrations.first { it.targetId == "target-b" }.port)
+
+        store.remove("target-a")
+
+        val remainingTargets = store.readTargets()
+        assertEquals(1, remainingTargets.size)
+        assertEquals("target-b", remainingTargets.single().targetId)
+    }
+
+    @Test
     fun readTargetsRecoversFromCorruptRegistryFiles() {
         val registryRoot = Files.createTempDirectory("ijmcp-registry-corrupt")
         val store = IjMcpTargetRegistryStore(registryRoot = registryRoot)
@@ -67,15 +90,20 @@ class IjMcpTargetRegistryStoreTest {
         assertTrue(Files.readString(registryRoot.resolve("targets.json")).contains("\"targets\": []"))
     }
 
-    private fun sampleStatus(targetId: String, port: Int): IjMcpTargetStatus = IjMcpTargetStatus(
+    private fun sampleStatus(
+        targetId: String,
+        port: Int,
+        projectName: String = "ij-mcp",
+        projectPath: String = "/tmp/ij-mcp",
+    ): IjMcpTargetStatus = IjMcpTargetStatus(
         descriptor = IjMcpTargetDescriptor(
             targetId = targetId,
             ideInstanceId = "ide-1",
             pid = 4242L,
             productCode = "IC",
             productName = "IntelliJ IDEA Community Edition",
-            projectName = "ij-mcp",
-            projectPath = "/tmp/ij-mcp",
+            projectName = projectName,
+            projectPath = projectPath,
         ),
         running = true,
         port = port,
