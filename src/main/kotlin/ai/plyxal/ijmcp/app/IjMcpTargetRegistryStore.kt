@@ -32,13 +32,13 @@ internal class IjMcpTargetRegistryStore(
     private val registryFile = registryRoot.resolve("targets.json")
     private val lockFile = registryRoot.resolve("targets.lock")
 
-    fun upsert(status: IjMcpTargetStatus, requiresPairing: Boolean) {
+    fun upsert(status: IjMcpTargetStatus) {
         withRegistryLock {
             val now = Instant.now(clock)
             val snapshot = readSnapshotRecovering()
             val nextTargets = cleanup(snapshot.targets, now)
                 .filterNot { it.targetId == status.descriptor.targetId }
-                .plus(status.toRegistration(requiresPairing, now))
+                .plus(status.toRegistration(now))
                 .sortedBy { it.targetId }
 
             writeSnapshot(IjMcpTargetRegistrySnapshot(targets = nextTargets))
@@ -148,10 +148,7 @@ internal class IjMcpTargetRegistryStore(
     }
 }
 
-private fun IjMcpTargetStatus.toRegistration(
-    requiresPairing: Boolean,
-    now: Instant,
-): IjMcpTargetRegistration = IjMcpTargetRegistration(
+private fun IjMcpTargetStatus.toRegistration(now: Instant): IjMcpTargetRegistration = IjMcpTargetRegistration(
     targetId = descriptor.targetId,
     ideInstanceId = descriptor.ideInstanceId,
     pid = descriptor.pid,

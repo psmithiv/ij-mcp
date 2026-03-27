@@ -1,5 +1,6 @@
 package ai.plyxal.ijmcp.mcp
 
+import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.net.InetAddress
@@ -8,11 +9,19 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 internal class IjMcpHttpServer(
     private val router: IjMcpRequestRouter,
+    private val security: IjMcpServerSecurity = IjMcpStaticTokenSecurity(IjMcpProtocol.defaultBearerToken),
+    private val statusProvider: () -> IjMcpTargetStatus? = { null },
+    private val onAuthenticationStateChanged: (() -> Unit)? = null,
     private val executor: ExecutorService = Executors.newCachedThreadPool(),
 ) : AutoCloseable {
+    private val json = Json { prettyPrint = false }
     private var server: HttpServer? = null
 
     val boundPort: Int?
@@ -33,7 +42,13 @@ internal class IjMcpHttpServer(
         )
 
         httpServer.createContext(IjMcpProtocol.endpointPath) { exchange ->
-            handleExchange(config, exchange)
+            handleMcpExchange(exchange)
+        }
+        httpServer.createContext(IjMcpProtocol.healthPath) { exchange ->
+            handleHealthExchange(exchange)
+        }
+        httpServer.createContext(IjMcpProtocol.pairingPath) { exchange ->
+            handlePairingExchange(exchange)
         }
         httpServer.executor = executor
         httpServer.start()
@@ -53,12 +68,9 @@ internal class IjMcpHttpServer(
         executor.shutdownNow()
     }
 
-    private fun handleExchange(
-        config: IjMcpServerConfig,
-        exchange: HttpExchange,
-    ) {
+    private fun handleMcpExchange(exchange: HttpExchange) {
         try {
-            if (!isAuthorized(exchange, config)) {
+            if (!security.isAuthorized(exchange.requestHeaders.getFirst("Authorization"))) {
                 writeResponse(
                     exchange,
                     IjMcpHttpResponse(
@@ -106,10 +118,149 @@ internal class IjMcpHttpServer(
         }
     }
 
-    private fun isAuthorized(
-        exchange: HttpExchange,
-        config: IjMcpServerConfig,
-    ): Boolean = exchange.requestHeaders.getFirst("Authorization") == "Bearer ${config.bearerToken}"
+    private fun handleHealthExchange(exchange: HttpExchange) {
+        try {
+            if (exchange.requestMethod != "GET") {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 405,
+                        body = "Method Not Allowed",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            val status = statusProvider()
+            writeResponse(
+                exchange,
+                IjMcpHttpResponse(
+                    statusCode = 200,
+                    body = json.encodeToString(
+                        JsonObject.serializer(),
+                        buildJsonObject {
+                            put("protocolVersion", IjMcpProtocol.protocolVersion)
+                            put("requiresPairing", security.requiresPairing())
+                            put("running", status?.running ?: false)
+                            status?.let {
+                                put("targetId", it.descriptor.targetId)
+                                put("projectName", it.descriptor.projectName)
+                                put("projectPath", it.descriptor.projectPath)
+                                put("endpointUrl", it.endpointUrl)
+                                put("port", it.port)
+                            }
+                        },
+                    ),
+                ),
+            )
+        } finally {
+            exchange.close()
+        }
+    }
+
+    private fun handlePairingExchange(exchange: HttpExchange) {
+        try {
+            if (!isAllowedOrigin(exchange.requestHeaders.getFirst("Origin"))) {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 403,
+                        body = "Forbidden",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            if (exchange.requestMethod != "POST") {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 405,
+                        body = "Method Not Allowed",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            val requestBody = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            val pairingCode = parsePairingCode(requestBody)
+                ?: run {
+                    writeResponse(
+                        exchange,
+                        IjMcpHttpResponse(
+                            statusCode = 400,
+                            body = json.encodeToString(
+                                JsonObject.serializer(),
+                                buildJsonObject {
+                                    put("status", "error")
+                                    put("errorCode", "invalid_pairing_request")
+                                    put("message", "A non-empty pairingCode string is required.")
+                                },
+                            ),
+                        ),
+                    )
+                    return
+                }
+
+            when (val result = security.exchangePairingCode(pairingCode)) {
+                is IjMcpPairingExchangeResult.Success -> {
+                    onAuthenticationStateChanged?.invoke()
+                    val status = statusProvider()
+                    writeResponse(
+                        exchange,
+                        IjMcpHttpResponse(
+                            statusCode = 200,
+                            body = json.encodeToString(
+                                JsonObject.serializer(),
+                                buildJsonObject {
+                                    put("status", "success")
+                                    put("bearerToken", result.bearerToken)
+                                    put("protocolVersion", IjMcpProtocol.protocolVersion)
+                                    put("requiresPairing", security.requiresPairing())
+                                    status?.let {
+                                        put("targetId", it.descriptor.targetId)
+                                        put("endpointUrl", it.endpointUrl)
+                                        put("projectName", it.descriptor.projectName)
+                                    }
+                                },
+                            ),
+                        ),
+                    )
+                }
+
+                is IjMcpPairingExchangeResult.Failure -> {
+                    writeResponse(
+                        exchange,
+                        IjMcpHttpResponse(
+                            statusCode = result.statusCode,
+                            body = json.encodeToString(
+                                JsonObject.serializer(),
+                                buildJsonObject {
+                                    put("status", "error")
+                                    put("errorCode", result.errorCode)
+                                    put("message", result.message)
+                                },
+                            ),
+                        ),
+                    )
+                }
+            }
+        } finally {
+            exchange.close()
+        }
+    }
+
+    private fun parsePairingCode(requestBody: String): String? = runCatching {
+        val body = json.parseToJsonElement(requestBody) as? JsonObject ?: return@runCatching null
+        body["pairingCode"]
+            ?.toString()
+            ?.trim('"')
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
     private fun isAllowedOrigin(originHeader: String?): Boolean {
         if (originHeader.isNullOrBlank()) {

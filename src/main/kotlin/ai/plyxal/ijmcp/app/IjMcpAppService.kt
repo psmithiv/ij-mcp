@@ -62,7 +62,7 @@ class IjMcpAppService : Disposable {
     }
 
     internal fun targetStatuses(): List<IjMcpTargetStatus> = runtimesByTargetId.values
-        .map { it.status() }
+        .map { it.currentStatus() }
         .sortedWith(compareBy({ it.descriptor.projectName.lowercase() }, { it.descriptor.targetId }))
 
     override fun dispose() {

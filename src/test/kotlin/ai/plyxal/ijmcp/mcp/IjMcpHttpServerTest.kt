@@ -71,8 +71,11 @@ class IjMcpHttpServerTest {
     }
 
     private fun withServer(block: (port: Int) -> Unit) {
-        IjMcpHttpServer(IjMcpRequestRouter()).use { server ->
-            val port = server.start(IjMcpServerConfig(port = 0, bearerToken = "test-token"))
+        IjMcpHttpServer(
+            IjMcpRequestRouter(),
+            security = IjMcpStaticTokenSecurity("test-token"),
+        ).use { server ->
+            val port = server.start(IjMcpServerConfig(port = 0))
             block(port)
         }
     }

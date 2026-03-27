@@ -15,5 +15,6 @@ data class IjMcpTargetStatus(
     val running: Boolean,
     val port: Int,
     val endpointUrl: String,
+    val requiresPairing: Boolean,
     val lastError: String? = null,
 )
