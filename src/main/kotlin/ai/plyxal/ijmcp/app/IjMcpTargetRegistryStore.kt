@@ -32,6 +32,8 @@ internal class IjMcpTargetRegistryStore(
     private val registryFile = registryRoot.resolve("targets.json")
     private val lockFile = registryRoot.resolve("targets.lock")
 
+    fun registryFile(): Path = registryFile
+
     fun upsert(status: IjMcpTargetStatus) {
         withRegistryLock {
             val now = Instant.now(clock)

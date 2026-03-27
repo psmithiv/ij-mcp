@@ -65,6 +65,15 @@ class IjMcpAppService : Disposable {
         .map { it.currentStatus() }
         .sortedWith(compareBy({ it.descriptor.projectName.lowercase() }, { it.descriptor.targetId }))
 
+    internal fun issuePairingCode(targetId: String): IssuedPairingCode? = runtimesByTargetId[targetId]?.issuePairingCode()
+
+    internal fun resetAuthentication(targetId: String): Boolean = runtimesByTargetId[targetId]
+        ?.let {
+            it.resetAuthentication()
+            true
+        }
+        ?: false
+
     override fun dispose() {
         runtimesByTargetId.clear()
     }
