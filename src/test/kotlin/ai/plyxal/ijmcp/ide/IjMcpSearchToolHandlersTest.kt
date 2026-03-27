@@ -107,7 +107,7 @@ class IjMcpSearchToolHandlersTest : BasePlatformTestCase() {
         assertEquals("outside_project", failure.errorCode)
     }
 
-    private fun handler(name: String) = IjMcpSearchToolHandlers()
+    private fun handler(name: String) = IjMcpSearchToolHandlers(project)
         .all()
         .associateBy { it.descriptor.name }
         .getValue(name)

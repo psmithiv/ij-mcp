@@ -21,7 +21,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 internal class IjMcpSearchToolHandlers(
-    private val projectResolver: IjMcpProjectResolver = IjMcpProjectResolver(),
+    private val project: Project,
     private val pathResolver: IjMcpPathResolver = IjMcpPathResolver(),
 ) {
     fun all(): List<IjMcpToolHandler> = listOf(
@@ -32,14 +32,14 @@ internal class IjMcpSearchToolHandlers(
     private inner class SearchFilesToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("search_files")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val query = arguments.stringValue("query")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty query is required.",
                 )
             val limit = arguments.limitValue()
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "Limit must be an integer between 1 and 100.",
                 )
@@ -95,7 +95,7 @@ internal class IjMcpSearchToolHandlers(
             }
 
             if (results.isEmpty()) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "file_not_found",
                     message = "No project files matched query \"$query\".",
                 )
@@ -132,14 +132,14 @@ internal class IjMcpSearchToolHandlers(
     private inner class SearchSymbolsToolHandler : IjMcpToolHandler {
         override val descriptor = IjMcpToolCatalog.descriptor("search_symbols")
 
-        override fun call(arguments: JsonObject): IjMcpToolCallResult = withActiveProject { project ->
+        override fun call(arguments: JsonObject): IjMcpToolCallResult = withProject { project ->
             val query = arguments.stringValue("query")
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "A non-empty query is required.",
                 )
             val limit = arguments.limitValue()
-                ?: return@withActiveProject IjMcpToolResults.error(
+                ?: return@withProject IjMcpToolResults.error(
                     errorCode = "invalid_tool_arguments",
                     message = "Limit must be an integer between 1 and 100.",
                 )
@@ -203,7 +203,7 @@ internal class IjMcpSearchToolHandlers(
             }
 
             if (results.isEmpty()) {
-                return@withActiveProject IjMcpToolResults.error(
+                return@withProject IjMcpToolResults.error(
                     errorCode = "symbol_not_found",
                     message = "No project symbols matched query \"$query\".",
                 )
@@ -239,15 +239,7 @@ internal class IjMcpSearchToolHandlers(
         }
     }
 
-    private fun withActiveProject(
-        action: (project: Project) -> IjMcpToolCallResult,
-    ): IjMcpToolCallResult = when (val projectResolution = projectResolver.resolveActiveProject()) {
-        is IjMcpProjectResolution.Success -> action(projectResolution.project)
-        is IjMcpProjectResolution.Failure -> IjMcpToolResults.error(
-            errorCode = projectResolution.errorCode,
-            message = projectResolution.message,
-        )
-    }
+    private fun withProject(action: (project: Project) -> IjMcpToolCallResult): IjMcpToolCallResult = action(project)
 
     private fun collectSymbolCandidateNames(
         cache: PsiShortNamesCache,

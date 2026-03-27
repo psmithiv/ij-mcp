@@ -8,7 +8,7 @@ import com.intellij.openapi.startup.StartupActivity
 class IjMcpProjectStartupActivity : StartupActivity.DumbAware {
     override fun runActivity(project: Project) {
         ApplicationManager.getApplication().executeOnPooledThread {
-            service<IjMcpAppService>().applyConfiguredState()
+            project.service<IjMcpProjectRuntimeService>().applyConfiguredState()
         }
     }
 }

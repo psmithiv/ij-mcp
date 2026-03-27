@@ -1,117 +1,69 @@
 package ai.plyxal.ijmcp.app
 
-import ai.plyxal.ijmcp.ide.IjMcpNavigationToolHandlers
-import ai.plyxal.ijmcp.ide.IjMcpSearchToolHandlers
-import ai.plyxal.ijmcp.mcp.IjMcpHttpServer
 import ai.plyxal.ijmcp.mcp.IjMcpProtocol
-import ai.plyxal.ijmcp.mcp.IjMcpRequestRouter
-import ai.plyxal.ijmcp.mcp.IjMcpServerConfig
-import ai.plyxal.ijmcp.mcp.IjMcpToolRegistry
 import ai.plyxal.ijmcp.model.IjMcpServerStatus
-import ai.plyxal.ijmcp.settings.IjMcpSecretStore
-import ai.plyxal.ijmcp.settings.IjMcpSettingsService
+import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Application-level entry point for the MCP transport stack.
- *
- * Later tickets will wire persisted settings and token management into this service. The current
- * implementation keeps the transport lifecycle explicit so the routing layer can be exercised and
- * tested without depending on IntelliJ UI state.
- */
 @Service(Service.Level.APP)
 class IjMcpAppService : Disposable {
     private val logger = thisLogger()
-    private val server = IjMcpHttpServer(
-        IjMcpRequestRouter(
-            IjMcpToolRegistry(
-                handlers = IjMcpNavigationToolHandlers().all() + IjMcpSearchToolHandlers().all(),
-            ),
-        ),
-    )
-    private var activeConfiguration: IjMcpServerConfig? = null
+    private val ideInstanceId = UUID.randomUUID().toString()
+    private val runtimesByTargetId = ConcurrentHashMap<String, IjMcpProjectRuntimeService>()
 
-    @Volatile
-    private var status = stoppedStatus(IjMcpProtocol.defaultPort)
+    internal fun ideInstanceId(): String = ideInstanceId
 
-    internal fun start(config: IjMcpServerConfig = IjMcpServerConfig()): IjMcpServerStatus {
-        return try {
-            if (server.isRunning) {
-                server.stop()
-            }
+    internal fun registerRuntime(runtime: IjMcpProjectRuntimeService) {
+        runtimesByTargetId[runtime.descriptor().targetId] = runtime
+        logger.info("Registered IJ-MCP target ${runtime.descriptor().targetId} for project ${runtime.descriptor().projectName}")
+    }
 
-            val boundPort = server.start(config)
-            val nextStatus = IjMcpServerStatus(
-                running = true,
-                port = boundPort,
-                endpointUrl = endpointUrl(boundPort),
-            )
-
-            activeConfiguration = config
-            status = nextStatus
-            logger.info("IJ-MCP transport started on ${nextStatus.endpointUrl}")
-            nextStatus
-        } catch (exception: Exception) {
-            val nextStatus = stoppedStatus(config.port, exception.message ?: "Failed to start MCP transport.")
-            activeConfiguration = null
-            status = nextStatus
-            logger.warn("Failed to start IJ-MCP transport", exception)
-            nextStatus
-        }
+    internal fun unregisterRuntime(targetId: String) {
+        runtimesByTargetId.remove(targetId)
+        logger.info("Unregistered IJ-MCP target $targetId")
     }
 
     internal fun applyConfiguredState(): IjMcpServerStatus {
-        val settings = service<IjMcpSettingsService>().snapshot()
+        runtimesByTargetId.values.forEach { it.applyConfiguredState() }
+        return status()
+    }
 
-        if (!settings.enabled) {
-            stop(port = settings.port)
-            return status
-        }
-
-        val token = service<IjMcpSecretStore>().loadToken()
-        if (token.isNullOrBlank()) {
-            stop(
-                port = settings.port,
-                lastError = "No bearer token is configured.",
+    internal fun status(): IjMcpServerStatus {
+        val targetStatuses = targetStatuses()
+        if (targetStatuses.isEmpty()) {
+            return stoppedStatus(
+                port = IjMcpProtocol.defaultPort,
+                lastError = "No open IntelliJ project window is available.",
             )
-            return status
         }
 
-        val desiredConfiguration = IjMcpServerConfig(
-            port = settings.port,
-            bearerToken = token,
+        val runningStatuses = targetStatuses.filter { it.running }
+        if (runningStatuses.isNotEmpty()) {
+            val primary = runningStatuses.first()
+            return IjMcpServerStatus(
+                running = true,
+                port = primary.port,
+                endpointUrl = primary.endpointUrl,
+            )
+        }
+
+        val firstStopped = targetStatuses.first()
+        return stoppedStatus(
+            port = firstStopped.port,
+            lastError = firstStopped.lastError ?: "No IJ-MCP target is running.",
         )
-
-        if (desiredConfiguration == activeConfiguration && server.isRunning) {
-            return status
-        }
-
-        return start(desiredConfiguration)
     }
 
-    internal fun stop() {
-        stop(port = status.port)
-    }
-
-    private fun stop(
-        port: Int,
-        lastError: String? = null,
-    ) {
-        server.stop()
-        activeConfiguration = null
-        status = stoppedStatus(port, lastError)
-        logger.info("IJ-MCP transport stopped")
-    }
-
-    internal fun status(): IjMcpServerStatus = status
+    internal fun targetStatuses(): List<IjMcpTargetStatus> = runtimesByTargetId.values
+        .map { it.status() }
+        .sortedWith(compareBy({ it.descriptor.projectName.lowercase() }, { it.descriptor.targetId }))
 
     override fun dispose() {
-        server.close()
-        activeConfiguration = null
-        status = stoppedStatus(status.port)
+        runtimesByTargetId.clear()
     }
 
     private fun stoppedStatus(
@@ -120,9 +72,7 @@ class IjMcpAppService : Disposable {
     ) = IjMcpServerStatus(
         running = false,
         port = port,
-        endpointUrl = endpointUrl(port),
+        endpointUrl = "http://127.0.0.1:$port${IjMcpProtocol.endpointPath}",
         lastError = lastError,
     )
-
-    private fun endpointUrl(port: Int): String = "http://127.0.0.1:$port${IjMcpProtocol.endpointPath}"
 }
