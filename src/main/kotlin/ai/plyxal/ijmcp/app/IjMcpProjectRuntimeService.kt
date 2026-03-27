@@ -33,16 +33,24 @@ class IjMcpProjectRuntimeService(
     private val appService = service<IjMcpAppService>()
     private val settingsService = service<IjMcpSettingsService>()
     private val secretStore = service<IjMcpSecretStore>()
+    private val targetId = UUID.randomUUID().toString()
+    private val authManager = IjMcpTargetAuthManager(
+        targetId = targetId,
+        credentialStore = secretStore,
+    )
+    private val heartbeatExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val server = IjMcpHttpServer(
         IjMcpRequestRouter(
             IjMcpToolRegistry(
                 handlers = IjMcpNavigationToolHandlers(project).all() + IjMcpSearchToolHandlers(project).all(),
             ),
         ),
+        security = authManager,
+        statusProvider = ::currentStatus,
+        onAuthenticationStateChanged = ::refreshRegistrationState,
     )
-    private val heartbeatExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val descriptor = IjMcpTargetDescriptor(
-        targetId = UUID.randomUUID().toString(),
+        targetId = targetId,
         ideInstanceId = appService.ideInstanceId(),
         pid = ProcessHandle.current().pid(),
         productCode = ApplicationInfo.getInstance().build.productCode,
@@ -62,7 +70,7 @@ class IjMcpProjectRuntimeService(
 
     internal fun descriptor(): IjMcpTargetDescriptor = descriptor
 
-    internal fun status(): IjMcpTargetStatus = status
+    internal fun currentStatus(): IjMcpTargetStatus = status
 
     internal fun applyConfiguredState(): IjMcpTargetStatus {
         val settings = settingsService.snapshot()
@@ -80,18 +88,10 @@ class IjMcpProjectRuntimeService(
             return status
         }
 
-        val token = secretStore.loadToken()
-        if (token.isNullOrBlank()) {
-            stop(
-                port = settings.port,
-                lastError = "No bearer token is configured.",
-            )
-            return status
-        }
+        authManager.bootstrapLegacyToken(secretStore.loadLegacyToken())
 
         val desiredConfiguration = IjMcpServerConfig(
             port = settings.port,
-            bearerToken = token,
         )
 
         if (desiredConfiguration == activeConfiguration && server.isRunning) {
@@ -123,6 +123,7 @@ class IjMcpProjectRuntimeService(
                 running = true,
                 port = boundPort,
                 endpointUrl = endpointUrl(boundPort),
+                requiresPairing = authManager.requiresPairing(),
             )
 
             activeConfiguration = config.copy(port = boundPort)
@@ -177,6 +178,7 @@ class IjMcpProjectRuntimeService(
         running = false,
         port = port,
         endpointUrl = endpointUrl(port),
+        requiresPairing = authManager.requiresPairing(),
         lastError = lastError,
     )
 
@@ -198,9 +200,25 @@ class IjMcpProjectRuntimeService(
         }
 
         runCatching {
-            appService.targetRegistryStore().upsert(status, requiresPairing = false)
+            appService.targetRegistryStore().upsert(status)
         }.onFailure { exception ->
             logger.warn("Failed to publish IJ-MCP target ${descriptor.targetId} to the local registry", exception)
         }
+    }
+
+    internal fun issuePairingCode(): IssuedPairingCode {
+        val issuedCode = authManager.issuePairingCode()
+        refreshRegistrationState()
+        return issuedCode
+    }
+
+    internal fun resetAuthentication() {
+        authManager.reset()
+        refreshRegistrationState()
+    }
+
+    private fun refreshRegistrationState() {
+        status = status.copy(requiresPairing = authManager.requiresPairing())
+        publishRegistration()
     }
 }

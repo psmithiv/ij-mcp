@@ -16,10 +16,10 @@ class IjMcpTargetRegistryStoreTest {
     @Test
     fun upsertAndRemoveManageTargetRecords() {
         val registryRoot = Files.createTempDirectory("ijmcp-registry-test")
-        val clock = MutableClock(Instant.parse("2026-03-27T20:00:00Z"))
+        val clock = RegistryTestClock(Instant.parse("2026-03-27T20:00:00Z"))
         val store = IjMcpTargetRegistryStore(registryRoot = registryRoot, clock = clock)
 
-        store.upsert(sampleStatus("target-a", 9001), requiresPairing = false)
+        store.upsert(sampleStatus("target-a", 9001))
 
         val registrations = store.readTargets()
 
@@ -53,14 +53,14 @@ class IjMcpTargetRegistryStoreTest {
     @Test
     fun readTargetsDropsStaleEntries() {
         val registryRoot = Files.createTempDirectory("ijmcp-registry-stale")
-        val clock = MutableClock(Instant.parse("2026-03-27T20:00:00Z"))
+        val clock = RegistryTestClock(Instant.parse("2026-03-27T20:00:00Z"))
         val store = IjMcpTargetRegistryStore(
             registryRoot = registryRoot,
             clock = clock,
             staleAfter = Duration.ofSeconds(45),
         )
 
-        store.upsert(sampleStatus("target-a", 9001), requiresPairing = false)
+        store.upsert(sampleStatus("target-a", 9001))
         clock.advance(Duration.ofSeconds(46))
 
         assertTrue(store.readTargets().isEmpty())
@@ -80,15 +80,16 @@ class IjMcpTargetRegistryStoreTest {
         running = true,
         port = port,
         endpointUrl = "http://127.0.0.1:$port/mcp",
+        requiresPairing = false,
     )
 }
 
-private class MutableClock(
+private class RegistryTestClock(
     private var currentInstant: Instant,
 ) : Clock() {
     override fun getZone() = ZoneOffset.UTC
 
-    override fun withZone(zone: java.time.ZoneId?): Clock = this
+    override fun withZone(zone: java.time.ZoneId): Clock = this
 
     override fun instant(): Instant = currentInstant
 

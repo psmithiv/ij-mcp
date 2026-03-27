@@ -2,6 +2,8 @@ package ai.plyxal.ijmcp.mcp
 
 internal object IjMcpProtocol {
     const val endpointPath = "/mcp"
+    const val healthPath = "/health"
+    const val pairingPath = "/pair"
     const val jsonRpcVersion = "2.0"
     const val protocolVersion = "2025-11-25"
     const val defaultPort = 8765
@@ -18,5 +20,4 @@ internal object IjMcpProtocol {
 
 internal data class IjMcpServerConfig(
     val port: Int = IjMcpProtocol.defaultPort,
-    val bearerToken: String = IjMcpProtocol.defaultBearerToken,
 )
