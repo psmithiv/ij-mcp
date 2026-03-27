@@ -14,8 +14,11 @@ class IjMcpAppService : Disposable {
     private val logger = thisLogger()
     private val ideInstanceId = UUID.randomUUID().toString()
     private val runtimesByTargetId = ConcurrentHashMap<String, IjMcpProjectRuntimeService>()
+    private val targetRegistryStore = IjMcpTargetRegistryStore()
 
     internal fun ideInstanceId(): String = ideInstanceId
+
+    internal fun targetRegistryStore(): IjMcpTargetRegistryStore = targetRegistryStore
 
     internal fun registerRuntime(runtime: IjMcpProjectRuntimeService) {
         runtimesByTargetId[runtime.descriptor().targetId] = runtime

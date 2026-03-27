@@ -20,6 +20,10 @@ import com.intellij.openapi.project.Project
 import java.net.BindException
 import java.nio.file.Path
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 @Service(Service.Level.PROJECT)
 class IjMcpProjectRuntimeService(
@@ -36,6 +40,7 @@ class IjMcpProjectRuntimeService(
             ),
         ),
     )
+    private val heartbeatExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val descriptor = IjMcpTargetDescriptor(
         targetId = UUID.randomUUID().toString(),
         ideInstanceId = appService.ideInstanceId(),
@@ -46,6 +51,7 @@ class IjMcpProjectRuntimeService(
         projectPath = project.basePath?.let { Path.of(it).normalize().toString() }.orEmpty(),
     )
     private var activeConfiguration: IjMcpServerConfig? = null
+    private var heartbeat: ScheduledFuture<*>? = null
 
     @Volatile
     private var status = stoppedStatus(IjMcpProtocol.defaultPort, "Target not started.")
@@ -101,6 +107,7 @@ class IjMcpProjectRuntimeService(
         } finally {
             appService.unregisterRuntime(descriptor.targetId)
             server.close()
+            heartbeatExecutor.shutdownNow()
         }
     }
 
@@ -120,12 +127,15 @@ class IjMcpProjectRuntimeService(
 
             activeConfiguration = config.copy(port = boundPort)
             status = nextStatus
+            publishRegistration()
+            scheduleHeartbeat()
             logger.info("IJ-MCP target ${descriptor.targetId} started on ${nextStatus.endpointUrl}")
             nextStatus
         } catch (exception: Exception) {
             val nextStatus = stoppedStatus(config.port, exception.message ?: "Failed to start MCP transport.")
             activeConfiguration = null
             status = nextStatus
+            appService.targetRegistryStore().remove(descriptor.targetId)
             logger.warn("Failed to start IJ-MCP target ${descriptor.targetId}", exception)
             nextStatus
         }
@@ -151,8 +161,11 @@ class IjMcpProjectRuntimeService(
         lastError: String? = null,
     ) {
         server.stop()
+        heartbeat?.cancel(false)
+        heartbeat = null
         activeConfiguration = null
         status = stoppedStatus(port, lastError)
+        appService.targetRegistryStore().remove(descriptor.targetId)
         logger.info("IJ-MCP target ${descriptor.targetId} stopped")
     }
 
@@ -168,4 +181,26 @@ class IjMcpProjectRuntimeService(
     )
 
     private fun endpointUrl(port: Int): String = "http://127.0.0.1:$port${IjMcpProtocol.endpointPath}"
+
+    private fun scheduleHeartbeat() {
+        heartbeat?.cancel(false)
+        heartbeat = heartbeatExecutor.scheduleAtFixedRate(
+            { publishRegistration() },
+            15,
+            15,
+            TimeUnit.SECONDS,
+        )
+    }
+
+    private fun publishRegistration() {
+        if (!status.running) {
+            return
+        }
+
+        runCatching {
+            appService.targetRegistryStore().upsert(status, requiresPairing = false)
+        }.onFailure { exception ->
+            logger.warn("Failed to publish IJ-MCP target ${descriptor.targetId} to the local registry", exception)
+        }
+    }
 }
