@@ -76,6 +76,33 @@ class IjMcpTargetAuthManagerTest {
         assertFalse(authManager.isAuthorized("Bearer legacy-token"))
         assertTrue(authManager.requiresPairing())
     }
+
+    @Test
+    fun targetScopedTokensAreIsolatedAcrossTargets() {
+        val store = InMemoryTargetCredentialStore()
+        val targetA = IjMcpTargetAuthManager(
+            targetId = "target-a",
+            credentialStore = store,
+            tokenFactory = { "token-a" },
+            pairingCodeFactory = { "PAIRA123" },
+        )
+        val targetB = IjMcpTargetAuthManager(
+            targetId = "target-b",
+            credentialStore = store,
+            tokenFactory = { "token-b" },
+            pairingCodeFactory = { "PAIRB123" },
+        )
+
+        targetA.issuePairingCode()
+        targetB.issuePairingCode()
+        targetA.exchangePairingCode("PAIRA123")
+        targetB.exchangePairingCode("PAIRB123")
+
+        assertTrue(targetA.isAuthorized("Bearer token-a"))
+        assertFalse(targetA.isAuthorized("Bearer token-b"))
+        assertTrue(targetB.isAuthorized("Bearer token-b"))
+        assertFalse(targetB.isAuthorized("Bearer token-a"))
+    }
 }
 
 private class InMemoryTargetCredentialStore : IjMcpTargetCredentialStore {
