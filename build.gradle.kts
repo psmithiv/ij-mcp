@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.WriteProperties
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -68,7 +69,20 @@ intellijPlatform {
     }
 }
 
+val generatePluginBuildInfo by tasks.registering(WriteProperties::class) {
+    destinationFile = layout.buildDirectory.file("generated/resources/ijmcp-plugin.properties")
+    comment = null
+    encoding = "UTF-8"
+    property("version", providers.gradleProperty("pluginVersion").get())
+    property("sinceBuild", providers.gradleProperty("pluginSinceBuild").get())
+    property("untilBuild", providers.gradleProperty("pluginUntilBuild").get())
+}
+
 tasks {
+    processResources {
+        from(generatePluginBuildInfo)
+    }
+
     wrapper {
         gradleVersion = providers.gradleProperty("gradleVersion").get()
     }

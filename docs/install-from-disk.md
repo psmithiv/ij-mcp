@@ -51,6 +51,9 @@ useful inside a real project window.
 After `Apply`, the `IJ-MCP` settings page should show:
 
 * `Server Status` as `Running at http://127.0.0.1:<port>/mcp`
+* `Plugin Build` with the installed plugin version
+* `Compatibility` with the current IDE build and supported range
+* `Operator Guidance` with the next recommended action for the current state
 * `Target Identity` populated with a `targetId`
 * `Project` populated with the project name and base path
 * `Endpoint` populated with the active loopback URL
@@ -76,6 +79,10 @@ available yet. Open a normal project window and refresh the page.
 
 If `Server Status` or `Endpoint` stays stopped, check `Diagnostics` for
 `lastError`.
+
+Also check `Operator Guidance`, which should distinguish whether the problem is
+caused by missing project configuration, compatibility drift, or a runtime
+startup failure.
 
 One known stop condition is:
 
