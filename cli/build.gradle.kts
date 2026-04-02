@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.WriteProperties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -31,4 +32,15 @@ dependencies {
 
 application {
     mainClass = "ai.plyxal.ijmcp.cli.IjMcpCliKt"
+}
+
+val generateCliBuildInfo by tasks.registering(WriteProperties::class) {
+    destinationFile = layout.buildDirectory.file("generated/resources/ijmcp-cli.properties")
+    comment = null
+    encoding = "UTF-8"
+    property("version", providers.gradleProperty("pluginVersion").get())
+}
+
+tasks.processResources {
+    from(generateCliBuildInfo)
 }

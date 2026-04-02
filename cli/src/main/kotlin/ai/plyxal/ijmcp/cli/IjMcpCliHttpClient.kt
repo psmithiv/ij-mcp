@@ -111,7 +111,7 @@ internal class IjMcpCliHttpClient(
                         "clientInfo",
                         buildJsonObject {
                             put("name", "ij-mcp-cli")
-                            put("version", "0.1.0")
+                            put("version", IjMcpCliBuildInfo.cliVersion)
                         },
                     )
                 },

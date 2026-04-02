@@ -30,6 +30,30 @@ Useful commands:
 ./gradlew :cli:run --args='help'
 ```
 
+## Release Artifacts
+
+Versioned build outputs:
+
+* plugin zip: `build/distributions/ij-mcp-<version>.zip`
+* companion CLI install: `cli/build/install/cli/`
+
+The plugin zip is the install-from-disk artifact for IntelliJ IDEA. The
+companion CLI is the local operator surface for target discovery, pairing, and
+request routing.
+
+## Compatibility
+
+The current rollout policy is intentionally narrow:
+
+* IntelliJ IDEA compatibility is limited to `2025.2.x`
+* plugin metadata encodes that range as `sinceBuild = 252` and `untilBuild = 252.*`
+* the plugin and companion CLI should be run at the same repository version unless
+  a mixed-version combination has been explicitly validated
+
+Detailed policy:
+
+* [Release artifact and compatibility](docs/release-artifact-and-compatibility.md)
+
 ## Repository Status
 
 The v1 implementation currently covers:
