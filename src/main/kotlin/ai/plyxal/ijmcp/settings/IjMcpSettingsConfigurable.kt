@@ -1,14 +1,17 @@
 package ai.plyxal.ijmcp.settings
 
 import ai.plyxal.ijmcp.app.IjMcpAppService
+import ai.plyxal.ijmcp.app.IjMcpPluginBuildInfo
 import ai.plyxal.ijmcp.app.IssuedPairingCode
 import ai.plyxal.ijmcp.model.IjMcpServerStatus
 import ai.plyxal.ijmcp.model.IjMcpTargetRegistration
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
+import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.SearchableConfigurable
+import com.intellij.openapi.util.BuildNumber
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.FormBuilder
@@ -36,6 +39,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val enabledCheckBox = JCheckBox("Enable local MCP server")
     private val portSpinner = JSpinner(SpinnerNumberModel(8765, 0, 65535, 1))
     private val serverStatusLabel = JBLabel("Server status: stopped")
+    private val pluginBuildLabel = JBLabel("Plugin build: unknown")
+    private val compatibilityLabel = JBLabel("Compatibility: unknown")
+    private val operatorGuidanceLabel = JBLabel("Operator guidance: unknown")
     private val targetSelector = JComboBox<TargetOption>()
     private val refreshTargetsButton = JButton("Refresh Targets")
     private val targetIdentityLabel = JBLabel("Target: none detected")
@@ -146,6 +152,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                         .addComponent(enabledCheckBox)
                         .addLabeledComponent("Preferred Port", portSpinner)
                         .addLabeledComponent("Server Status", serverStatusLabel)
+                        .addLabeledComponent("Plugin Build", pluginBuildLabel)
+                        .addLabeledComponent("Compatibility", compatibilityLabel)
+                        .addLabeledComponent("Operator Guidance", operatorGuidanceLabel)
                         .addSeparator()
                         .addComponentFillVertically(targetPanel, 0)
                         .panel,
@@ -184,6 +193,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         val state = settingsService.snapshot()
         enabledCheckBox.isSelected = state.enabled
         portSpinner.value = state.port
+        renderCompatibility()
         renderStatus(appService.status())
         pairingCodeField.text = ""
         pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
@@ -220,6 +230,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             "Running at ${status.endpointUrl}"
         } else {
             status.lastError?.let { "Stopped: $it" } ?: "Stopped"
+        }
+
+        if (!status.running) {
+            operatorGuidanceLabel.text = buildAppGuidance(status)
         }
     }
 
@@ -269,7 +283,8 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             endpointStatusLabel.text = "Endpoint: not running"
             pairingStatusLabel.text = "Pairing status: unknown"
             registryStatusLabel.text = "Registry status: no active registration"
-            diagnosticsArea.text = "No project-window target is currently registered in this IDE instance."
+            operatorGuidanceLabel.text = "Operator guidance: open a normal project window, then enable IJ-MCP."
+            diagnosticsArea.text = buildNoTargetDiagnostics()
             pairingCodeTargetId = null
             pairingCodeField.text = ""
             pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
@@ -305,6 +320,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         } else {
             "Registry status: registered at ${registration.lastSeenAt}"
         }
+        operatorGuidanceLabel.text = buildTargetGuidance(status)
         diagnosticsArea.text = buildDiagnostics(status, registration)
         generatePairingCodeButton.isEnabled = true
         resetPairingButton.isEnabled = true
@@ -324,6 +340,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         endpointStatusLabel.text = "Endpoint: refreshing..."
         pairingStatusLabel.text = "Pairing status: refreshing..."
         registryStatusLabel.text = "Registry status: refreshing..."
+        operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
         diagnosticsArea.text = "Refreshing target state..."
         generatePairingCodeButton.isEnabled = false
         resetPairingButton.isEnabled = false
@@ -339,10 +356,91 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         resetPairingButton.isEnabled = false
     }
 
+    private fun renderCompatibility() {
+        val applicationInfo = ApplicationInfo.getInstance()
+        val currentBuild = applicationInfo.build
+        val compatible = isCompatible(currentBuild)
+        val supportedRange = "${IjMcpPluginBuildInfo.sinceBuild}..${IjMcpPluginBuildInfo.untilBuild}"
+        val currentBuildText = currentBuild.asStringWithoutProductCode()
+
+        pluginBuildLabel.text = "Plugin build: ${IjMcpPluginBuildInfo.pluginVersion}"
+        compatibilityLabel.text = if (compatible) {
+            "Compatibility: ${applicationInfo.fullApplicationName} build $currentBuildText is within supported range $supportedRange"
+        } else {
+            "Compatibility: ${applicationInfo.fullApplicationName} build $currentBuildText is outside supported range $supportedRange; use IntelliJ IDEA 2025.2.x"
+        }
+    }
+
+    private fun isCompatible(currentBuild: BuildNumber): Boolean {
+        val sinceBaseline = IjMcpPluginBuildInfo.sinceBuild.substringBefore('.').toIntOrNull() ?: return true
+        val untilBaseline = IjMcpPluginBuildInfo.untilBuild.substringBefore('.').toIntOrNull() ?: return true
+        val withinLowerBound = currentBuild.baselineVersion >= sinceBaseline
+        val withinUpperBound = if (IjMcpPluginBuildInfo.untilBuild.endsWith(".*")) {
+            currentBuild.baselineVersion == untilBaseline
+        } else {
+            currentBuild.baselineVersion <= untilBaseline
+        }
+        return withinLowerBound && withinUpperBound
+    }
+
+    private fun buildAppGuidance(status: IjMcpServerStatus): String {
+        val configuredPort = settingsService.snapshot().port
+        val detail = status.lastError
+
+        return when {
+            detail == "No open IntelliJ project window is available." ->
+                "Operator guidance: open a normal project window, search Settings for IJ-MCP, and click Apply."
+            detail != null ->
+                "Operator guidance: resolve the startup issue shown in Diagnostics, then click Apply again."
+            else ->
+                "Operator guidance: enable IJ-MCP and click Apply to start the local MCP server."
+        }.let { message ->
+            if (status.running || configuredPort == status.port || configuredPort == 0) {
+                message
+            } else {
+                "$message Preferred port $configuredPort is not active."
+            }
+        }
+    }
+
+    private fun buildTargetGuidance(status: IjMcpTargetStatus): String {
+        val configuredPort = settingsService.snapshot().port
+
+        return when {
+            !status.running && status.lastError == "The project window does not expose a resolvable base path." ->
+                "Operator guidance: open the project from disk so IJ-MCP can resolve a base path before starting."
+            !status.running ->
+                "Operator guidance: inspect Diagnostics for the startup failure, then click Refresh Targets or Apply after correcting it."
+            configuredPort != 0 && status.port != configuredPort ->
+                "Operator guidance: preferred port $configuredPort was unavailable; this target is running on ${status.port}. Re-discover or re-pair clients that expected the preferred port."
+            status.requiresPairing ->
+                "Operator guidance: the target is live. Use Pair CLI to authorize the companion CLI or coding agent."
+            else ->
+                "Operator guidance: the target is live and paired."
+        }
+    }
+
+    private fun buildNoTargetDiagnostics(): String = buildString {
+        appendLine("compatibilityState=${if (isCompatible(ApplicationInfo.getInstance().build)) "compatible" else "unsupported"}")
+        appendLine("pluginVersion=${IjMcpPluginBuildInfo.pluginVersion}")
+        appendLine("supportedBuildRange=${IjMcpPluginBuildInfo.sinceBuild}..${IjMcpPluginBuildInfo.untilBuild}")
+        appendLine("currentIde=${ApplicationInfo.getInstance().fullApplicationName}")
+        appendLine("currentBuild=${ApplicationInfo.getInstance().build.asStringWithoutProductCode()}")
+        appendLine("operatorGuidance=open a normal project window to register an IJ-MCP target")
+        append("targetState=none detected")
+    }
+
     private fun buildDiagnostics(
         status: IjMcpTargetStatus,
         registration: IjMcpTargetRegistration?,
     ): String = buildString {
+        appendLine("compatibilityState=${if (isCompatible(ApplicationInfo.getInstance().build)) "compatible" else "unsupported"}")
+        appendLine("pluginVersion=${IjMcpPluginBuildInfo.pluginVersion}")
+        appendLine("supportedBuildRange=${IjMcpPluginBuildInfo.sinceBuild}..${IjMcpPluginBuildInfo.untilBuild}")
+        appendLine("currentIde=${ApplicationInfo.getInstance().fullApplicationName}")
+        appendLine("currentBuild=${ApplicationInfo.getInstance().build.asStringWithoutProductCode()}")
+        appendLine("operatorGuidance=${buildTargetGuidance(status).removePrefix("Operator guidance: ")}")
+        appendLine("configuredPort=${settingsService.snapshot().port}")
         appendLine("targetId=${status.descriptor.targetId}")
         appendLine("ideInstanceId=${status.descriptor.ideInstanceId}")
         appendLine("pid=${status.descriptor.pid}")

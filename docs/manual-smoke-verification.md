@@ -42,6 +42,8 @@ In each window:
 4. Click `Apply`.
 5. Confirm the settings page shows:
    * a running endpoint for the selected target
+   * plugin build and compatibility details for the current IDE
+   * operator guidance for the current target state
    * the current `targetId`
    * the project name and path
    * registry diagnostics for that target
