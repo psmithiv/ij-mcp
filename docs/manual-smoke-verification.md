@@ -8,7 +8,20 @@ This checklist verifies the current multi-target IJ-MCP flow: one MCP target per
 * IntelliJ IDEA 2025.2-compatible runtime
 * a local shell
 
-## 1. Launch the plugin sandbox
+## 1. Prepare IntelliJ IDEA
+
+Choose one setup path.
+
+### Installed IntelliJ IDEA instance
+
+Follow:
+
+* [Install IJ-MCP from disk](install-from-disk.md)
+
+After install and restart, open one or two project windows in the normal IDE
+instance before continuing.
+
+### Plugin sandbox for development verification
 
 From the repo root:
 
@@ -16,7 +29,8 @@ From the repo root:
 ./gradlew runIde
 ```
 
-Open two project windows in the sandbox IDE if you want to verify multi-window behavior.
+Open one or two project windows in the sandbox IDE if you want to verify
+multi-window behavior.
 
 ## 2. Enable IJ-MCP and inspect target state
 

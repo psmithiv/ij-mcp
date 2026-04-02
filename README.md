@@ -41,6 +41,19 @@ The plugin zip is the install-from-disk artifact for IntelliJ IDEA. The
 companion CLI is the local operator surface for target discovery, pairing, and
 request routing.
 
+## Install In IntelliJ IDEA
+
+To install `IJ-MCP` into a normal IntelliJ IDEA instance:
+
+* build `build/distributions/ij-mcp-<version>.zip`
+* install the zip with `Install Plugin from Disk...`
+* open a project window, search `Settings` / `Preferences` for `IJ-MCP`, and
+  enable `Enable local MCP server`
+
+Detailed steps:
+
+* [Install IJ-MCP from disk](docs/install-from-disk.md)
+
 ## Compatibility
 
 The current rollout policy is intentionally narrow:
@@ -94,6 +107,7 @@ Automated verification:
 
 Manual verification:
 
+* [Install IJ-MCP from disk](docs/install-from-disk.md)
 * [Manual smoke verification](docs/manual-smoke-verification.md)
 
 ## Project Layout
