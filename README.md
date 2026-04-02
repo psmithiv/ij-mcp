@@ -108,6 +108,7 @@ Automated verification:
 Manual verification:
 
 * [Install IJ-MCP from disk](docs/install-from-disk.md)
+* [Installed IntelliJ validation](docs/installed-instance-validation.md)
 * [Manual smoke verification](docs/manual-smoke-verification.md)
 
 ## Project Layout
