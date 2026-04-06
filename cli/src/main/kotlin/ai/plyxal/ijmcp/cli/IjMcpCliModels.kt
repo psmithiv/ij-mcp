@@ -89,3 +89,17 @@ internal data class IjMcpSelectedTargetRouteSummary(
     val projectName: String? = null,
     val endpointUrl: String? = null,
 )
+
+internal data class IjMcpSelectedTargetStatus(
+    val routeStatus: String,
+    val registryFile: String,
+    val selectedTargetId: String? = null,
+    val projectName: String? = null,
+    val projectPath: String? = null,
+    val endpointUrl: String? = null,
+    val paired: Boolean = false,
+    val running: Boolean? = null,
+    val requiresPairing: Boolean? = null,
+    val recoveryCode: String? = null,
+    val recoveryAction: String? = null,
+)
