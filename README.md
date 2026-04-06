@@ -120,6 +120,7 @@ Automated verification:
 
 Manual verification:
 
+* [Operator setup guide](docs/operator-setup-guide.md)
 * [Install IJ-MCP from disk](docs/install-from-disk.md)
 * [Agent gateway setup](docs/agent-gateway-setup.md)
 * [Plugin lifecycle](docs/plugin-lifecycle.md)

@@ -99,11 +99,12 @@ This is not a failure if `Server Status` still shows `Running at ...`.
 
 ### Pairing cannot start
 
-If `Pair CLI` yields `Pairing code expiry: target unavailable`, refresh the
-target state and confirm the server is running before retrying.
+If `Generate Pairing Code` yields `Pairing code expiry: target unavailable`,
+refresh the target state and confirm the server is running before retrying.
 
 ## Next Step
 
 Once the plugin is installed and enabled, continue with:
 
+* [Operator setup guide](operator-setup-guide.md)
 * [Manual smoke verification](manual-smoke-verification.md)
