@@ -70,6 +70,8 @@ class IjMcpCliPairingTest {
             assertEquals(0, exitCode)
             assertEquals("rotated-token", nextState.credentialsByTargetId["target-a"])
             assertContains(stdoutText, "Paired target target-a")
+            assertContains(stdoutText, "Next: run `mcp tools-list` to verify direct CLI access.")
+            assertContains(stdoutText, "Next: run `gateway serve` to expose the sticky target to a coding agent.")
         }
     }
 

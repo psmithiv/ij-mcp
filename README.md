@@ -54,6 +54,17 @@ Detailed steps:
 
 * [Install IJ-MCP from disk](docs/install-from-disk.md)
 
+## Operator Happy Path
+
+The shortest end-to-end local setup flow is:
+
+1. Install `build/distributions/ij-mcp-<version>.zip` into IntelliJ IDEA.
+2. Open a normal project window, search Settings for `IJ-MCP`, enable the local MCP server, and click `Apply`.
+3. Run `./gradlew :cli:run --args='targets list'` and `./gradlew :cli:run --args='targets select <targetId>'`.
+4. Generate a one-time pairing code in the plugin UI, then run `./gradlew :cli:run --args='targets pair --code <pairingCode>'`.
+5. Verify direct access with `./gradlew :cli:run --args='mcp tools-list'`.
+6. If you want agent access, print the stable endpoint with `./gradlew :cli:run --args='gateway config'` and start it with `./gradlew :cli:run --args='gateway serve'`.
+
 ## Compatibility
 
 The current rollout policy is intentionally narrow:
