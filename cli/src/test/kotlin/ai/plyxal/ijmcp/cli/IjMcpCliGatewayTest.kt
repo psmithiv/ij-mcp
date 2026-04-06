@@ -52,14 +52,24 @@ class IjMcpCliGatewayTest {
     @Test
     fun gatewayProxiesInitializeAndToolsListThroughStableLoopbackEndpoint() {
         val observedMethods = Collections.synchronizedList(mutableListOf<String>())
+        val directory = Files.createTempDirectory("ijmcp-cli-gateway-proxy")
 
         withFakeTargetServer(observedMethods) { targetPort ->
-            IjMcpCliGatewayServer(
-                config = IjMcpGatewayConfig(port = 0, bearerToken = "gateway-token"),
-                targetResolver = {
-                    Result.success(
-                        IjMcpResolvedTarget(
-                            registration = IjMcpTargetRegistration(
+            val stateStore = IjMcpCliStateStore(directory.resolve("client-state.json"))
+            stateStore.save(
+                IjMcpClientState(
+                    selectedTargetId = "target-a",
+                    credentialsByTargetId = mapOf("target-a" to "target-token"),
+                    gatewayBearerToken = "gateway-token",
+                ),
+            )
+            Files.writeString(
+                directory.resolve("targets.json"),
+                json.encodeToString(
+                    IjMcpTargetRegistrySnapshot.serializer(),
+                    IjMcpTargetRegistrySnapshot(
+                        targets = listOf(
+                            IjMcpTargetRegistration(
                                 targetId = "target-a",
                                 ideInstanceId = "ide-a",
                                 pid = 1234,
@@ -73,28 +83,20 @@ class IjMcpCliGatewayTest {
                                 requiresPairing = false,
                                 lastSeenAt = "2026-04-06T12:00:00Z",
                             ),
-                            health = IjMcpHealthResponse(
-                                protocolVersion = IJ_MCP_PROTOCOL_VERSION,
-                                requiresPairing = false,
-                                running = true,
-                                targetId = "target-a",
-                                projectName = "ij-mcp",
-                                projectPath = "/tmp/ij-mcp",
-                                endpointUrl = "http://127.0.0.1:$targetPort/mcp",
-                                port = targetPort,
-                            ),
-                            bearerToken = "target-token",
                         ),
-                    )
-                },
-                routeSummaryProvider = {
-                    IjMcpSelectedTargetRouteSummary(
-                        routeStatus = "selected",
-                        selectedTargetId = "target-a",
-                        projectName = "ij-mcp",
-                        endpointUrl = "http://127.0.0.1:$targetPort/mcp",
-                    )
-                },
+                    ),
+                ),
+            )
+            val resolver = IjMcpSelectedTargetResolver(
+                stateStore = stateStore,
+                registryReader = IjMcpTargetRegistryReader(directory.resolve("targets.json")),
+                httpClient = IjMcpCliHttpClient(),
+            )
+
+            IjMcpCliGatewayServer(
+                config = IjMcpGatewayConfig(port = 0, bearerToken = "gateway-token"),
+                preflight = IjMcpGatewayPreflight(resolver),
+                routeSummaryProvider = { resolver.describeStickyRoute() },
             ).use { gatewayServer ->
                 val gatewayPort = gatewayServer.start(IjMcpGatewayServerConfig(port = 0))
 
@@ -141,10 +143,11 @@ class IjMcpCliGatewayTest {
                 assertContains(healthResponse.body(), "\"endpointUrl\":\"http://127.0.0.1:$gatewayPort/mcp\"")
                 assertContains(healthResponse.body(), "\"routingMode\":\"sticky-selected-target\"")
                 assertContains(healthResponse.body(), "\"routeStatus\":\"selected\"")
+                assertContains(healthResponse.body(), "\"initializedTargetId\":\"target-a\"")
             }
         }
 
-        assertEquals(listOf("initialize", "tools/list"), observedMethods.toList())
+        assertEquals(listOf("health", "initialize", "health", "tools/list"), observedMethods.toList())
     }
 
     private fun withFakeTargetServer(
@@ -155,6 +158,21 @@ class IjMcpCliGatewayTest {
             InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0),
             0,
         )
+        server.createContext("/health") { exchange ->
+            try {
+                observedMethods.add("health")
+                val responseBody =
+                    """{"protocolVersion":"$IJ_MCP_PROTOCOL_VERSION","requiresPairing":false,"running":true,"targetId":"target-a","projectName":"ij-mcp","projectPath":"/tmp/ij-mcp","endpointUrl":"http://127.0.0.1:${server.address.port}/mcp","port":${server.address.port}}"""
+                exchange.responseHeaders.set("Content-Type", "application/json; charset=utf-8")
+                val responseBytes = responseBody.toByteArray(StandardCharsets.UTF_8)
+                exchange.sendResponseHeaders(200, responseBytes.size.toLong())
+                exchange.responseBody.use { output ->
+                    output.write(responseBytes)
+                }
+            } finally {
+                exchange.close()
+            }
+        }
         server.createContext("/mcp") { exchange ->
             try {
                 if (exchange.requestHeaders.getFirst("Authorization") != "Bearer target-token") {
