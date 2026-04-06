@@ -156,10 +156,16 @@ internal class IjMcpSelectedTargetResolver(
         }
 
         if (health.requiresPairing) {
+            val recoveryCode = if (bearerToken.isBlank()) "pairing_required" else "repair_required"
+            val recoveryAction = if (bearerToken.isBlank()) {
+                "Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`."
+            } else {
+                "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`."
+            }
             throw IjMcpTargetRouteFailure(
-                recoveryCode = "pairing_required",
+                recoveryCode = recoveryCode,
                 message = "Target $selectedTargetId currently requires pairing.",
-                recoveryAction = "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
+                recoveryAction = recoveryAction,
                 selectedTargetId = selectedTargetId,
             )
         }

@@ -113,7 +113,41 @@ class IjMcpGatewayPreflightTest {
 
                 assertEquals(200, response.statusCode())
                 assertContains(response.body(), "\"message\":\"Target target-a currently requires pairing.\"")
-                assertContains(response.body(), "\"recoveryCode\":\"pairing_required\"")
+                assertContains(response.body(), "\"recoveryCode\":\"repair_required\"")
+                assertContains(response.body(), "\"recoveryAction\":\"Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> target-a`.\"")
+                assertEquals(listOf("health"), observedRequests.toList())
+            }
+        }
+    }
+
+    @Test
+    fun gatewayFailsClearlyWhenTargetIsRegisteredButNotRunning() {
+        val directory = Files.createTempDirectory("ijmcp-cli-gateway-not-running")
+        val observedRequests = mutableListOf<String>()
+
+        withFakeTargetServer(observedRequests, running = false) { targetPort ->
+            withGatewayServer(
+                directory = directory,
+                targetPort = targetPort,
+                credentialsByTargetId = mapOf("target-a" to "target-token"),
+            ) { gatewayPort ->
+                val response = client.send(
+                    HttpRequest.newBuilder(URI.create("http://127.0.0.1:$gatewayPort/mcp"))
+                        .header("Authorization", "Bearer gateway-token")
+                        .header("Content-Type", "application/json")
+                        .header("MCP-Protocol-Version", IJ_MCP_PROTOCOL_VERSION)
+                        .POST(
+                            HttpRequest.BodyPublishers.ofString(
+                                """{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}""",
+                            ),
+                        )
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString(),
+                )
+
+                assertEquals(200, response.statusCode())
+                assertContains(response.body(), "\"recoveryCode\":\"target_not_running\"")
+                assertContains(response.body(), "\"recoveryAction\":\"Reopen the IDE window or refresh plugin settings.\"")
                 assertEquals(listOf("health"), observedRequests.toList())
             }
         }
@@ -278,6 +312,7 @@ class IjMcpGatewayPreflightTest {
     private fun withFakeTargetServer(
         observedRequests: MutableList<String>,
         requiresPairing: Boolean = false,
+        running: Boolean = true,
         block: (port: Int) -> Unit,
     ) {
         val server = HttpServer.create(
@@ -289,7 +324,7 @@ class IjMcpGatewayPreflightTest {
                 observedRequests.add("health")
                 writeJsonResponse(
                     exchange,
-                    """{"protocolVersion":"$IJ_MCP_PROTOCOL_VERSION","requiresPairing":$requiresPairing,"running":true,"targetId":"target-a","projectName":"ij-mcp","projectPath":"/tmp/ij-mcp","endpointUrl":"http://127.0.0.1:${server.address.port}/mcp","port":${server.address.port}}""",
+                    """{"protocolVersion":"$IJ_MCP_PROTOCOL_VERSION","requiresPairing":$requiresPairing,"running":$running,"targetId":"target-a","projectName":"ij-mcp","projectPath":"/tmp/ij-mcp","endpointUrl":"http://127.0.0.1:${server.address.port}/mcp","port":${server.address.port}}""",
                 )
             } finally {
                 exchange.close()
