@@ -46,7 +46,8 @@ In each window:
    * operator guidance for the current target state
    * the current `targetId`
    * the project name and path
-   * registry diagnostics for that target
+   * the registry file path and live registry entry summary
+   * the runtime identity and last-error summary for that target
 
 Expected result:
 
@@ -78,13 +79,17 @@ Expected result:
 
 * `targets list` shows one line per active project-window target
 * the selected target is marked with `*`
-* `targets current` returns the selected target identity and endpoint
+* `targets current` returns:
+  * `routeStatus=selected_unpaired`
+  * the selected target metadata and registry file path
+  * `recoveryCode=pairing_required`
+  * `recoveryAction=Issue a pairing code ...`
 
 ## 4. Pair the CLI with the selected target
 
 In the IJ-MCP settings page for the selected target:
 
-1. Click `Pair CLI`.
+1. Click `Generate Pairing Code`.
 2. Copy the one-time pairing code.
 
 In the shell:
@@ -96,7 +101,8 @@ In the shell:
 Expected result:
 
 * the CLI prints `Paired target ...`
-* `targets current` still points at the same target
+* the CLI prints the next direct-access and gateway steps
+* `targets current` still points at the same target and now returns `routeStatus=selected`
 * `targets list` shows the selected target as `paired`
 
 ## 5. Verify MCP routing through the sticky target
@@ -142,17 +148,20 @@ Expected result:
 
 In the IJ-MCP settings page for the selected target:
 
-1. Click `Reset Pairing`.
+1. Click `Reset CLI Access`.
 
 In the shell:
 
 ```bash
+./gradlew :cli:run --args='targets current'
 ./gradlew :cli:run --args='mcp tools-list'
 ```
 
 Expected result:
 
-* the request fails clearly with a message that the target should be re-paired
+* `targets current` returns `routeStatus=selected_repair_required`
+* `targets current` prints `recoveryCode=repair_required`
+* the direct MCP request fails clearly with a repair or re-pair message
 * no other available target is used automatically
 
 Re-pair with a fresh code and confirm `mcp tools-list` succeeds again.
@@ -169,7 +178,8 @@ Re-pair with a fresh code and confirm `mcp tools-list` succeeds again.
 Expected result:
 
 * the CLI fails with an unavailable or unreachable target message
-* the CLI tells you to run `targets list` and `targets select <targetId>`
+* `targets current` or `mcp tools-list` prints an explicit `recoveryCode`
+* the CLI tells you to run `targets list` and `targets select <targetId>` when the selection is stale
 * the CLI does not silently switch to another target
 
 ## 9. Verify coding-agent gateway configuration
@@ -210,6 +220,8 @@ Then run the repo validation script:
 Expected result:
 
 * the gateway health endpoint reports `routingMode` as `sticky-selected-target`
+* `gateway config` reports the selected target and a `routeStatus`
+* `gateway config` prints the next action for either serving the gateway or repairing the selected target
 * `codex mcp get ij-mcp` shows the streamable HTTP gateway entry
 * the validation script creates or updates `.ijmcp-agent-validation.txt`
 * IntelliJ reveals and opens that file in the selected project window
