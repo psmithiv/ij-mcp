@@ -61,6 +61,7 @@ internal class IjMcpCli(
                 val targets = registryReader.readTargets()
                 if (targets.isEmpty()) {
                     stdout.println("No IJ-MCP targets are currently registered.")
+                    stdout.println("Next: open IntelliJ IDEA, enable IJ-MCP in Settings, click Apply, then run `targets list` again.")
                 } else {
                     targets.forEach { target ->
                         val selectionMarker = if (state.selectedTargetId == target.targetId) "*" else " "
@@ -111,6 +112,10 @@ internal class IjMcpCli(
                     state.copy(selectedTargetId = targetId),
                 )
                 stdout.println("Selected target $targetId (${registration.projectName}).")
+                val summary = selectedTargetResolver.describeSelectedTargetStatus()
+                val nextAction = summary.recoveryAction
+                    ?: "Run `mcp tools-list` to verify direct access or `gateway serve` to expose this target to a coding agent."
+                stdout.println("Next: $nextAction")
                 0
             }
 
@@ -150,6 +155,8 @@ internal class IjMcpCli(
             ),
         )
         stdout.println("Paired target ${registration.targetId} (${registration.projectName}).")
+        stdout.println("Next: run `mcp tools-list` to verify direct CLI access.")
+        stdout.println("Next: run `gateway serve` to expose the sticky target to a coding agent.")
         return 0
     }
 
@@ -231,10 +238,17 @@ internal class IjMcpCli(
         return when (args.first()) {
             "config" -> {
                 val gatewayConfig = ensureGatewayConfig()
+                val selectedTargetStatus = selectedTargetResolver.describeSelectedTargetStatus()
                 stdout.println("endpointUrl=http://127.0.0.1:${gatewayConfig.port}/mcp")
                 stdout.println("healthUrl=http://127.0.0.1:${gatewayConfig.port}/health")
                 stdout.println("gatewayBearerToken=${gatewayConfig.bearerToken}")
-                stdout.println("selectedTargetId=${stateStore.load().selectedTargetId ?: ""}")
+                stdout.println("selectedTargetId=${selectedTargetStatus.selectedTargetId ?: ""}")
+                stdout.println("routeStatus=${selectedTargetStatus.routeStatus}")
+                if (!selectedTargetStatus.recoveryAction.isNullOrBlank()) {
+                    stdout.println("nextAction=${selectedTargetStatus.recoveryAction}")
+                } else {
+                    stdout.println("nextAction=Run `gateway serve` and add this endpoint to your coding agent configuration.")
+                }
                 0
             }
 
@@ -357,6 +371,13 @@ internal class IjMcpCli(
         stream.println("  ij-mcp-cli targets <list|current|select|pair|forget> ...")
         stream.println("  ij-mcp-cli mcp <tools-list|call> ...")
         stream.println("  ij-mcp-cli gateway <config|serve> ...")
+        stream.println("")
+        stream.println("Happy path:")
+        stream.println("  1. targets list")
+        stream.println("  2. targets select <targetId>")
+        stream.println("  3. targets current")
+        stream.println("  4. targets pair --code <pairingCode>")
+        stream.println("  5. mcp tools-list or gateway serve")
     }
 
     private fun printTargetsUsage(stream: PrintStream) {
