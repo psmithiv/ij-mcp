@@ -93,6 +93,8 @@ Supported commands:
 ./gradlew :cli:run --args='targets forget [targetId]'
 ./gradlew :cli:run --args='mcp tools-list'
 ./gradlew :cli:run --args='mcp call <toolName> [jsonArguments]'
+./gradlew :cli:run --args='gateway config'
+./gradlew :cli:run --args='gateway serve'
 ```
 
 ## Verification

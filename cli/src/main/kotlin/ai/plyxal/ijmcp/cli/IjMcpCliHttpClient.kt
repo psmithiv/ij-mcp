@@ -119,6 +119,34 @@ internal class IjMcpCliHttpClient(
         },
     ).map { Unit }
 
+    fun forwardJsonRpc(
+        target: IjMcpResolvedTarget,
+        requestBody: String,
+        protocolVersionHeader: String?,
+    ): Result<IjMcpHttpExchangeResult> = runCatching {
+        val requestBuilder = HttpRequest.newBuilder(URI.create(target.registration.endpointUrl))
+            .header("Authorization", "Bearer ${target.bearerToken}")
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+
+        if (!protocolVersionHeader.isNullOrBlank()) {
+            requestBuilder.header("MCP-Protocol-Version", protocolVersionHeader)
+        }
+
+        val response = httpClient.send(
+            requestBuilder
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+
+        IjMcpHttpExchangeResult(
+            statusCode = response.statusCode(),
+            body = response.body(),
+            contentType = response.headers().firstValue("Content-Type").orElse(null),
+        )
+    }
+
     private fun postJsonRpc(
         endpointUrl: String,
         bearerToken: String,

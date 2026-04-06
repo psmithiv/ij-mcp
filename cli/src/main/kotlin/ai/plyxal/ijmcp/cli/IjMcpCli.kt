@@ -1,6 +1,8 @@
 package ai.plyxal.ijmcp.cli
 
 import java.io.PrintStream
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import kotlin.system.exitProcess
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -33,6 +35,7 @@ internal class IjMcpCli(
         return when (args.first()) {
             "targets" -> runTargets(args.drop(1))
             "mcp" -> runMcp(args.drop(1))
+            "gateway" -> runGateway(args.drop(1))
             "help", "--help", "-h" -> {
                 printUsage(stdout)
                 0
@@ -222,6 +225,31 @@ internal class IjMcpCli(
         }
     }
 
+    private fun runGateway(args: List<String>): Int {
+        if (args.isEmpty()) {
+            printGatewayUsage(stderr)
+            return 64
+        }
+
+        return when (args.first()) {
+            "config" -> {
+                val gatewayConfig = ensureGatewayConfig()
+                stdout.println("endpointUrl=http://127.0.0.1:${gatewayConfig.port}/mcp")
+                stdout.println("healthUrl=http://127.0.0.1:${gatewayConfig.port}/health")
+                stdout.println("gatewayBearerToken=${gatewayConfig.bearerToken}")
+                stdout.println("selectedTargetId=${stateStore.load().selectedTargetId ?: ""}")
+                0
+            }
+
+            "serve" -> serveGateway()
+            else -> {
+                stderr.println("Unknown gateway subcommand: ${args.first()}")
+                printGatewayUsage(stderr)
+                64
+            }
+        }
+    }
+
     private fun resolveTargetForMutation(targetId: String?): IjMcpTargetRegistration? {
         val state = stateStore.load()
         val resolvedTargetId = targetId ?: state.selectedTargetId
@@ -242,60 +270,113 @@ internal class IjMcpCli(
     }
 
     private fun resolveSelectedConnectedTarget(): IjMcpResolvedTarget? {
+        return resolveSelectedConnectedTargetResult().getOrElse { exception ->
+            stderr.println(exception.message)
+            null
+        }
+    }
+
+    private fun resolveSelectedConnectedTargetResult(): Result<IjMcpResolvedTarget> = runCatching {
         val state = stateStore.load()
         val selectedTargetId = state.selectedTargetId
         if (selectedTargetId.isNullOrBlank()) {
-            stderr.println("No sticky target is selected. Run `targets list` and `targets select <targetId>`.")
-            return null
+            throw IllegalStateException(
+                "No sticky target is selected. Run `targets list` and `targets select <targetId>`.",
+            )
         }
 
         val registration = registryReader.readTargets().firstOrNull { it.targetId == selectedTargetId }
         if (registration == null) {
-            stderr.println(
+            throw IllegalStateException(
                 "Selected target $selectedTargetId is unavailable. Run `targets list` and `targets select <targetId>`.",
             )
-            return null
         }
 
         val bearerToken = state.credentialsByTargetId[selectedTargetId]
         if (bearerToken.isNullOrBlank()) {
-            stderr.println(
+            throw IllegalStateException(
                 "No stored credential exists for target $selectedTargetId. Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
             )
-            return null
         }
 
         val health = httpClient.health(registration).getOrElse { exception ->
-            stderr.println(
+            throw IllegalStateException(
                 "Selected target $selectedTargetId is unreachable: ${exception.message}. Reopen the IDE window or run `targets list` and `targets select <targetId>`.",
             )
-            return null
         }
 
         if (!health.running) {
-            stderr.println(
+            throw IllegalStateException(
                 "Selected target $selectedTargetId is registered but not running. Reopen the IDE window or refresh plugin settings.",
             )
-            return null
         }
 
-        httpClient.initialize(
-            IjMcpResolvedTarget(
-                registration = registration,
-                health = health,
-                bearerToken = bearerToken,
-            ),
-        ).getOrElse { exception ->
-            stderr.println(
-                "Initialization against target $selectedTargetId failed: ${exception.message}. Re-pair the target if credentials were reset.",
-            )
-            return null
-        }
-
-        return IjMcpResolvedTarget(
+        val resolvedTarget = IjMcpResolvedTarget(
             registration = registration,
             health = health,
             bearerToken = bearerToken,
+        )
+
+        httpClient.initialize(resolvedTarget).getOrElse { exception ->
+            throw IllegalStateException(
+                "Initialization against target $selectedTargetId failed: ${exception.message}. Re-pair the target if credentials were reset.",
+            )
+        }
+
+        resolvedTarget
+    }
+
+    private fun serveGateway(): Int {
+        val gatewayConfig = ensureGatewayConfig()
+        val latch = CountDownLatch(1)
+
+        IjMcpCliGatewayServer(
+            config = gatewayConfig,
+            targetResolver = { resolveSelectedConnectedTargetResult() },
+            stateProvider = { stateStore.load() },
+            httpClient = httpClient,
+        ).use { server ->
+            val port = server.start(IjMcpGatewayServerConfig(port = gatewayConfig.port))
+            stdout.println("IJ-MCP gateway listening on http://127.0.0.1:$port/mcp")
+            stdout.println("Use `gateway config` to print the stable bearer token and health endpoint.")
+
+            val shutdownHook = Thread {
+                runCatching { server.close() }
+                latch.countDown()
+            }
+            Runtime.getRuntime().addShutdownHook(shutdownHook)
+
+            try {
+                latch.await()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return 130
+            } finally {
+                runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
+            }
+        }
+
+        return 0
+    }
+
+    private fun ensureGatewayConfig(): IjMcpGatewayConfig {
+        val state = stateStore.load()
+        val normalizedPort = state.gatewayPort.takeIf { it in 1..65535 } ?: IJ_MCP_GATEWAY_DEFAULT_PORT
+        val normalizedToken = state.gatewayBearerToken
+            ?.takeIf { it.isNotBlank() }
+            ?: "ijmcp-gateway-${UUID.randomUUID()}"
+
+        val normalizedState = state.copy(
+            gatewayPort = normalizedPort,
+            gatewayBearerToken = normalizedToken,
+        )
+        if (normalizedState != state) {
+            stateStore.save(normalizedState)
+        }
+
+        return IjMcpGatewayConfig(
+            port = normalizedPort,
+            bearerToken = normalizedToken,
         )
     }
 
@@ -316,6 +397,7 @@ internal class IjMcpCli(
         stream.println("Usage:")
         stream.println("  ij-mcp-cli targets <list|current|select|pair|forget> ...")
         stream.println("  ij-mcp-cli mcp <tools-list|call> ...")
+        stream.println("  ij-mcp-cli gateway <config|serve> ...")
     }
 
     private fun printTargetsUsage(stream: PrintStream) {
@@ -331,6 +413,12 @@ internal class IjMcpCli(
         stream.println("MCP usage:")
         stream.println("  mcp tools-list")
         stream.println("  mcp call <toolName> [jsonArguments]")
+    }
+
+    private fun printGatewayUsage(stream: PrintStream) {
+        stream.println("Gateway usage:")
+        stream.println("  gateway config")
+        stream.println("  gateway serve")
     }
 }
 

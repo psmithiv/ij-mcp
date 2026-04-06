@@ -25,5 +25,6 @@ class IjMcpCliStateStoreTest {
         assertEquals("target-a", state.selectedTargetId)
         assertEquals("token-a", state.credentialsByTargetId["target-a"])
         assertEquals("token-b", state.credentialsByTargetId["target-b"])
+        assertEquals(IJ_MCP_GATEWAY_DEFAULT_PORT, state.gatewayPort)
     }
 }
