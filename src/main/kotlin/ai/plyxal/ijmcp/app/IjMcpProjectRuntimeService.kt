@@ -88,7 +88,10 @@ class IjMcpProjectRuntimeService(
             return status
         }
 
-        authManager.bootstrapLegacyToken(secretStore.loadLegacyToken())
+        secretStore.loadLegacyToken()?.let { legacyToken ->
+            authManager.bootstrapLegacyToken(legacyToken)
+            secretStore.storeLegacyToken(null)
+        }
 
         val desiredConfiguration = IjMcpServerConfig(
             port = settings.port,
@@ -213,6 +216,7 @@ class IjMcpProjectRuntimeService(
     }
 
     internal fun resetAuthentication() {
+        secretStore.storeLegacyToken(null)
         authManager.reset()
         refreshRegistrationState()
     }

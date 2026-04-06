@@ -103,6 +103,29 @@ class IjMcpTargetAuthManagerTest {
         assertTrue(targetB.isAuthorized("Bearer token-b"))
         assertFalse(targetB.isAuthorized("Bearer token-a"))
     }
+
+    @Test
+    fun successfulRePairRotatesTheStoredTargetToken() {
+        val store = InMemoryTargetCredentialStore()
+        val target = IjMcpTargetAuthManager(
+            targetId = "target-a",
+            credentialStore = store,
+            tokenFactory = { if (store.loadTargetToken("target-a") == null) "token-a" else "token-b" },
+            pairingCodeFactory = { "PAIR1234" },
+        )
+
+        target.issuePairingCode()
+        target.exchangePairingCode("PAIR1234")
+        assertTrue(target.isAuthorized("Bearer token-a"))
+
+        target.issuePairingCode()
+        val exchange = target.exchangePairingCode("PAIR1234")
+
+        assertTrue(exchange is IjMcpPairingExchangeResult.Success)
+        assertEquals("token-b", (exchange as IjMcpPairingExchangeResult.Success).bearerToken)
+        assertFalse(target.isAuthorized("Bearer token-a"))
+        assertTrue(target.isAuthorized("Bearer token-b"))
+    }
 }
 
 private class InMemoryTargetCredentialStore : IjMcpTargetCredentialStore {

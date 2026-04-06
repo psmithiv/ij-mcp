@@ -85,8 +85,8 @@ internal class IjMcpTargetAuthManager(
         }
 
         activePairingCode = null
-        val bearerToken = credentialStore.loadTargetToken(targetId)
-            ?: tokenFactory().also { credentialStore.storeTargetToken(targetId, it) }
+        val bearerToken = tokenFactory()
+        credentialStore.storeTargetToken(targetId, bearerToken)
 
         IjMcpPairingExchangeResult.Success(bearerToken = bearerToken)
     }
