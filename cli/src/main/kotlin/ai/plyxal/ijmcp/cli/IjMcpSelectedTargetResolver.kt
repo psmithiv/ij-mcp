@@ -26,6 +26,87 @@ internal class IjMcpSelectedTargetResolver(
         )
     }
 
+    fun describeSelectedTargetStatus(): IjMcpSelectedTargetStatus {
+        val state = stateStore.load()
+        val selectedTargetId = state.selectedTargetId
+        val registryFile = registryReader.registryFile().toString()
+
+        if (selectedTargetId.isNullOrBlank()) {
+            return IjMcpSelectedTargetStatus(
+                routeStatus = "unselected",
+                registryFile = registryFile,
+                recoveryCode = "no_selection",
+                recoveryAction = "Run `targets list` and `targets select <targetId>`.",
+            )
+        }
+
+        val paired = state.credentialsByTargetId.containsKey(selectedTargetId)
+        val registration = registryReader.readTargets().firstOrNull { it.targetId == selectedTargetId }
+            ?: return IjMcpSelectedTargetStatus(
+                routeStatus = "stale_selection",
+                registryFile = registryFile,
+                selectedTargetId = selectedTargetId,
+                paired = paired,
+                recoveryCode = "stale_target",
+                recoveryAction = "Run `targets list` and `targets select <targetId>`.",
+            )
+
+        val health = httpClient.health(registration).getOrNull()
+        if (health == null) {
+            return IjMcpSelectedTargetStatus(
+                routeStatus = "selected_unreachable",
+                registryFile = registryFile,
+                selectedTargetId = selectedTargetId,
+                projectName = registration.projectName,
+                projectPath = registration.projectPath,
+                endpointUrl = registration.endpointUrl,
+                paired = paired,
+                requiresPairing = registration.requiresPairing,
+                recoveryCode = "target_unreachable",
+                recoveryAction = "Reopen the IDE window or run `targets list` and `targets select <targetId>`.",
+            )
+        }
+
+        val recovery = when {
+            !health.running -> {
+                "target_not_running" to "Reopen the IDE window or refresh plugin settings."
+            }
+
+            health.requiresPairing && paired -> {
+                "repair_required" to "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`."
+            }
+
+            health.requiresPairing -> {
+                "pairing_required" to "Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`."
+            }
+
+            !paired -> {
+                "pairing_required" to "Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`."
+            }
+
+            else -> null
+        }
+
+        return IjMcpSelectedTargetStatus(
+            routeStatus = when (recovery?.first) {
+                "target_not_running" -> "selected_stopped"
+                "repair_required" -> "selected_repair_required"
+                "pairing_required" -> "selected_unpaired"
+                else -> "selected"
+            },
+            registryFile = registryFile,
+            selectedTargetId = selectedTargetId,
+            projectName = registration.projectName,
+            projectPath = registration.projectPath,
+            endpointUrl = registration.endpointUrl,
+            paired = paired,
+            running = health.running,
+            requiresPairing = health.requiresPairing,
+            recoveryCode = recovery?.first,
+            recoveryAction = recovery?.second,
+        )
+    }
+
     fun resolveSelectedConnectedTarget(): Result<IjMcpResolvedTarget> = runCatching {
         val target = resolveSelectedHealthyTarget().getOrElse { exception ->
             throw exception

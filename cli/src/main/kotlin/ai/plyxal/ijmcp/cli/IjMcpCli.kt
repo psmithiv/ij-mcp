@@ -74,27 +74,23 @@ internal class IjMcpCli(
             }
 
             "current" -> {
-                val state = stateStore.load()
-                val selectedTargetId = state.selectedTargetId
-                if (selectedTargetId.isNullOrBlank()) {
-                    stderr.println("No sticky target is selected. Run `targets list` and `targets select <targetId>`.")
-                    return 1
+                val summary = selectedTargetResolver.describeSelectedTargetStatus()
+                stdout.println("routeStatus=${summary.routeStatus}")
+                stdout.println("registryFile=${summary.registryFile}")
+                stdout.println("selectedTargetId=${summary.selectedTargetId ?: ""}")
+                stdout.println("projectName=${summary.projectName ?: ""}")
+                stdout.println("projectPath=${summary.projectPath ?: ""}")
+                stdout.println("endpointUrl=${summary.endpointUrl ?: ""}")
+                stdout.println("paired=${summary.paired}")
+                stdout.println("running=${summary.running?.toString() ?: ""}")
+                stdout.println("requiresPairing=${summary.requiresPairing?.toString() ?: ""}")
+                if (!summary.recoveryCode.isNullOrBlank()) {
+                    stdout.println("recoveryCode=${summary.recoveryCode}")
                 }
-
-                val registration = registryReader.readTargets().firstOrNull { it.targetId == selectedTargetId }
-                if (registration == null) {
-                    stderr.println(
-                        "Selected target $selectedTargetId is unavailable. Run `targets list` and `targets select <targetId>`.",
-                    )
-                    return 1
+                if (!summary.recoveryAction.isNullOrBlank()) {
+                    stdout.println("recoveryAction=${summary.recoveryAction}")
                 }
-
-                stdout.println("targetId=${registration.targetId}")
-                stdout.println("projectName=${registration.projectName}")
-                stdout.println("projectPath=${registration.projectPath}")
-                stdout.println("endpointUrl=${registration.endpointUrl}")
-                stdout.println("paired=${state.credentialsByTargetId.containsKey(registration.targetId)}")
-                0
+                if (summary.recoveryCode == null) 0 else 1
             }
 
             "select" -> {
@@ -272,8 +268,19 @@ internal class IjMcpCli(
 
     private fun resolveSelectedConnectedTarget(): IjMcpResolvedTarget? {
         return selectedTargetResolver.resolveSelectedConnectedTarget().getOrElse { exception ->
-            stderr.println(exception.message)
+            printExceptionWithRecovery(exception)
             null
+        }
+    }
+
+    private fun printExceptionWithRecovery(exception: Throwable) {
+        stderr.println(exception.message)
+        if (exception is IjMcpTargetRouteFailure) {
+            stderr.println("recoveryCode=${exception.recoveryCode}")
+            stderr.println("recoveryAction=${exception.recoveryAction}")
+            if (!exception.selectedTargetId.isNullOrBlank()) {
+                stderr.println("selectedTargetId=${exception.selectedTargetId}")
+            }
         }
     }
 
