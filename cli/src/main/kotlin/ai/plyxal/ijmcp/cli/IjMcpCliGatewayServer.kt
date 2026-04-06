@@ -22,7 +22,7 @@ internal data class IjMcpGatewayServerConfig(
 internal class IjMcpCliGatewayServer(
     private val config: IjMcpGatewayConfig,
     private val targetResolver: () -> Result<IjMcpResolvedTarget>,
-    private val stateProvider: () -> IjMcpClientState,
+    private val routeSummaryProvider: () -> IjMcpSelectedTargetRouteSummary,
     private val httpClient: IjMcpCliHttpClient = IjMcpCliHttpClient(),
     private val executor: ExecutorService = Executors.newCachedThreadPool(),
 ) : AutoCloseable {
@@ -141,7 +141,7 @@ internal class IjMcpCliGatewayServer(
                 return
             }
 
-            val currentState = stateProvider()
+            val routeSummary = routeSummaryProvider()
             val port = requireNotNull(boundPort)
             writeResponse(
                 exchange,
@@ -154,9 +154,13 @@ internal class IjMcpCliGatewayServer(
                             put("running", true)
                             put("protocolVersion", IJ_MCP_PROTOCOL_VERSION)
                             put("gatewayVersion", IjMcpCliBuildInfo.cliVersion)
+                            put("routingMode", "sticky-selected-target")
+                            put("routeStatus", routeSummary.routeStatus)
                             put("endpointUrl", "http://127.0.0.1:$port/mcp")
                             put("healthUrl", "http://127.0.0.1:$port/health")
-                            currentState.selectedTargetId?.let { put("selectedTargetId", it) }
+                            routeSummary.selectedTargetId?.let { put("selectedTargetId", it) }
+                            routeSummary.projectName?.let { put("selectedProjectName", it) }
+                            routeSummary.endpointUrl?.let { put("selectedTargetEndpointUrl", it) }
                             put("requiresAuth", true)
                         },
                     ),
