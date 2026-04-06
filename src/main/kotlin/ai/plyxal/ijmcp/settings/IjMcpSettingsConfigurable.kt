@@ -49,6 +49,22 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val endpointStatusLabel = JBLabel("Endpoint: not running")
     private val pairingStatusLabel = JBLabel("Pairing status: unknown")
     private val registryStatusLabel = JBLabel("Registry status: unknown")
+    private val registryFileField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val registryEntryField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val runtimeIdentityField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val lastErrorField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
     private val pairingCodeField = JTextField().apply {
         isEditable = false
         columns = 18
@@ -143,6 +159,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                         .addLabeledComponent("Endpoint", endpointStatusLabel)
                         .addLabeledComponent("Pairing Status", pairingStatusLabel)
                         .addLabeledComponent("Registry Status", registryStatusLabel)
+                        .addLabeledComponent("Registry File", registryFileField)
+                        .addLabeledComponent("Registry Entry", registryEntryField)
+                        .addLabeledComponent("Runtime Identity", runtimeIdentityField)
+                        .addLabeledComponent("Last Error", lastErrorField)
                         .addLabeledComponent("Pairing Workflow", pairingWorkflowLabel)
                         .addLabeledComponent("Pairing Code", pairingCodeField)
                         .addLabeledComponent("Code Expiry", pairingCodeExpiryLabel)
@@ -292,6 +312,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             endpointStatusLabel.text = "Endpoint: not running"
             pairingStatusLabel.text = "Pairing status: unknown"
             registryStatusLabel.text = "Registry status: no active registration"
+            registryFileField.text = appService.targetRegistryStore().registryFile().toString()
+            registryEntryField.text = "No live registry entry is published because no target is selected."
+            runtimeIdentityField.text = "Open a normal project window to populate target runtime details."
+            lastErrorField.text = "No target is currently selected."
             operatorGuidanceLabel.text = "Operator guidance: open a normal project window, then enable IJ-MCP."
             diagnosticsArea.text = buildNoTargetDiagnostics()
             pairingCodeTargetId = null
@@ -333,6 +357,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         } else {
             "Registry status: registered at ${registration.lastSeenAt}"
         }
+        registryFileField.text = appService.targetRegistryStore().registryFile().toString()
+        registryEntryField.text = IjMcpDiagnosticsSummary.registryEntry(status, registration)
+        runtimeIdentityField.text = IjMcpDiagnosticsSummary.runtimeIdentity(status)
+        lastErrorField.text = IjMcpDiagnosticsSummary.lastError(status)
         pairingWorkflowLabel.text = "Pairing workflow: ${pairingMessaging.pairingWorkflow(status, activePairingCode)}"
         resetImpactLabel.text = "Reset impact: ${pairingMessaging.resetImpact(status, activePairingCode)}"
         pairingCodeExpiryLabel.text = pairingMessaging.codeExpiry(activePairingCode)
@@ -357,6 +385,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         endpointStatusLabel.text = "Endpoint: refreshing..."
         pairingStatusLabel.text = "Pairing status: refreshing..."
         registryStatusLabel.text = "Registry status: refreshing..."
+        registryFileField.text = appService.targetRegistryStore().registryFile().toString()
+        registryEntryField.text = "Refreshing registry state..."
+        runtimeIdentityField.text = "Refreshing runtime identity..."
+        lastErrorField.text = "Refreshing last error..."
         operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
         pairingWorkflowLabel.text = "Pairing workflow: refreshing target state..."
         diagnosticsArea.text = "Refreshing target state..."
