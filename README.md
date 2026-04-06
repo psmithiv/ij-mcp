@@ -124,6 +124,7 @@ Manual verification:
 * [Install IJ-MCP from disk](docs/install-from-disk.md)
 * [Agent gateway setup](docs/agent-gateway-setup.md)
 * [Plugin lifecycle](docs/plugin-lifecycle.md)
+* [Troubleshooting and recovery](docs/troubleshooting-and-recovery.md)
 * [Installed IntelliJ validation](docs/installed-instance-validation.md)
 * [Manual smoke verification](docs/manual-smoke-verification.md)
 
