@@ -82,3 +82,10 @@ internal data class IjMcpGatewayConfig(
     val port: Int,
     val bearerToken: String,
 )
+
+internal data class IjMcpSelectedTargetRouteSummary(
+    val routeStatus: String,
+    val selectedTargetId: String? = null,
+    val projectName: String? = null,
+    val endpointUrl: String? = null,
+)

@@ -25,6 +25,7 @@ internal class IjMcpCli(
         prettyPrint = true
         ignoreUnknownKeys = true
     }
+    private val selectedTargetResolver = IjMcpSelectedTargetResolver(stateStore, registryReader, httpClient)
 
     fun run(args: List<String>): Int {
         if (args.isEmpty()) {
@@ -270,60 +271,10 @@ internal class IjMcpCli(
     }
 
     private fun resolveSelectedConnectedTarget(): IjMcpResolvedTarget? {
-        return resolveSelectedConnectedTargetResult().getOrElse { exception ->
+        return selectedTargetResolver.resolveSelectedConnectedTarget().getOrElse { exception ->
             stderr.println(exception.message)
             null
         }
-    }
-
-    private fun resolveSelectedConnectedTargetResult(): Result<IjMcpResolvedTarget> = runCatching {
-        val state = stateStore.load()
-        val selectedTargetId = state.selectedTargetId
-        if (selectedTargetId.isNullOrBlank()) {
-            throw IllegalStateException(
-                "No sticky target is selected. Run `targets list` and `targets select <targetId>`.",
-            )
-        }
-
-        val registration = registryReader.readTargets().firstOrNull { it.targetId == selectedTargetId }
-        if (registration == null) {
-            throw IllegalStateException(
-                "Selected target $selectedTargetId is unavailable. Run `targets list` and `targets select <targetId>`.",
-            )
-        }
-
-        val bearerToken = state.credentialsByTargetId[selectedTargetId]
-        if (bearerToken.isNullOrBlank()) {
-            throw IllegalStateException(
-                "No stored credential exists for target $selectedTargetId. Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
-            )
-        }
-
-        val health = httpClient.health(registration).getOrElse { exception ->
-            throw IllegalStateException(
-                "Selected target $selectedTargetId is unreachable: ${exception.message}. Reopen the IDE window or run `targets list` and `targets select <targetId>`.",
-            )
-        }
-
-        if (!health.running) {
-            throw IllegalStateException(
-                "Selected target $selectedTargetId is registered but not running. Reopen the IDE window or refresh plugin settings.",
-            )
-        }
-
-        val resolvedTarget = IjMcpResolvedTarget(
-            registration = registration,
-            health = health,
-            bearerToken = bearerToken,
-        )
-
-        httpClient.initialize(resolvedTarget).getOrElse { exception ->
-            throw IllegalStateException(
-                "Initialization against target $selectedTargetId failed: ${exception.message}. Re-pair the target if credentials were reset.",
-            )
-        }
-
-        resolvedTarget
     }
 
     private fun serveGateway(): Int {
@@ -332,8 +283,8 @@ internal class IjMcpCli(
 
         IjMcpCliGatewayServer(
             config = gatewayConfig,
-            targetResolver = { resolveSelectedConnectedTargetResult() },
-            stateProvider = { stateStore.load() },
+            targetResolver = { selectedTargetResolver.resolveSelectedConnectedTarget() },
+            routeSummaryProvider = { selectedTargetResolver.describeStickyRoute() },
             httpClient = httpClient,
         ).use { server ->
             val port = server.start(IjMcpGatewayServerConfig(port = gatewayConfig.port))

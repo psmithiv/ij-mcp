@@ -16,9 +16,13 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class IjMcpCliGatewayTest {
     private val client = HttpClient.newHttpClient()
+    private val json = Json { prettyPrint = true }
 
     @Test
     fun gatewayConfigCreatesStableLocalEndpointAndToken() {
@@ -83,11 +87,12 @@ class IjMcpCliGatewayTest {
                         ),
                     )
                 },
-                stateProvider = {
-                    IjMcpClientState(
+                routeSummaryProvider = {
+                    IjMcpSelectedTargetRouteSummary(
+                        routeStatus = "selected",
                         selectedTargetId = "target-a",
-                        gatewayPort = 0,
-                        gatewayBearerToken = "gateway-token",
+                        projectName = "ij-mcp",
+                        endpointUrl = "http://127.0.0.1:$targetPort/mcp",
                     )
                 },
             ).use { gatewayServer ->
@@ -134,6 +139,8 @@ class IjMcpCliGatewayTest {
                 assertEquals(200, healthResponse.statusCode())
                 assertContains(healthResponse.body(), "\"selectedTargetId\":\"target-a\"")
                 assertContains(healthResponse.body(), "\"endpointUrl\":\"http://127.0.0.1:$gatewayPort/mcp\"")
+                assertContains(healthResponse.body(), "\"routingMode\":\"sticky-selected-target\"")
+                assertContains(healthResponse.body(), "\"routeStatus\":\"selected\"")
             }
         }
 
@@ -156,11 +163,9 @@ class IjMcpCliGatewayTest {
                 }
 
                 val requestBody = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-                val method = when {
-                    "\"method\":\"initialize\"" in requestBody -> "initialize"
-                    "\"method\":\"tools/list\"" in requestBody -> "tools/list"
-                    else -> "unknown"
-                }
+                val method = runCatching {
+                    json.parseToJsonElement(requestBody).jsonObject["method"]?.jsonPrimitive?.content
+                }.getOrNull() ?: "unknown"
 
                 observedMethods.add(method)
 
