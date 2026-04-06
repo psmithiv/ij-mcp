@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -77,8 +78,43 @@ class IjMcpGatewayPreflightTest {
                 )
 
                 assertEquals(200, response.statusCode())
-                assertContains(response.body(), "\"message\":\"No stored credential exists for target target-a.")
+                assertContains(response.body(), "\"message\":\"No stored credential exists for target target-a.\"")
+                assertContains(response.body(), "\"recoveryCode\":\"pairing_required\"")
+                assertContains(response.body(), "\"recoveryAction\":\"Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> target-a`.\"")
                 assertEquals(emptyList(), observedRequests.toList())
+            }
+        }
+    }
+
+    @Test
+    fun gatewayFailsClearlyWhenTargetRequiresPairing() {
+        val directory = Files.createTempDirectory("ijmcp-cli-gateway-requires-pairing")
+        val observedRequests = mutableListOf<String>()
+
+        withFakeTargetServer(observedRequests, requiresPairing = true) { targetPort ->
+            withGatewayServer(
+                directory = directory,
+                targetPort = targetPort,
+                credentialsByTargetId = mapOf("target-a" to "target-token"),
+            ) { gatewayPort ->
+                val response = client.send(
+                    HttpRequest.newBuilder(URI.create("http://127.0.0.1:$gatewayPort/mcp"))
+                        .header("Authorization", "Bearer gateway-token")
+                        .header("Content-Type", "application/json")
+                        .header("MCP-Protocol-Version", IJ_MCP_PROTOCOL_VERSION)
+                        .POST(
+                            HttpRequest.BodyPublishers.ofString(
+                                """{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}""",
+                            ),
+                        )
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString(),
+                )
+
+                assertEquals(200, response.statusCode())
+                assertContains(response.body(), "\"message\":\"Target target-a currently requires pairing.\"")
+                assertContains(response.body(), "\"recoveryCode\":\"pairing_required\"")
+                assertEquals(listOf("health"), observedRequests.toList())
             }
         }
     }
@@ -109,9 +145,41 @@ class IjMcpGatewayPreflightTest {
                 )
 
                 assertEquals(200, response.statusCode())
-                assertContains(response.body(), "\"message\":\"Initialization against target target-a failed: MCP request failed with HTTP 401.")
+                assertContains(response.body(), "\"message\":\"Initialization against target target-a failed: MCP request failed with HTTP 401.\"")
+                assertContains(response.body(), "\"recoveryCode\":\"repair_required\"")
+                assertContains(response.body(), "\"recoveryAction\":\"Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> target-a`.\"")
                 assertEquals(listOf("health"), observedRequests.toList())
             }
+        }
+    }
+
+    @Test
+    fun gatewayFailsClearlyWhenTargetIsUnreachable() {
+        val directory = Files.createTempDirectory("ijmcp-cli-gateway-unreachable")
+        val unreachablePort = ServerSocket(0).use { it.localPort }
+
+        withGatewayServer(
+            directory = directory,
+            targetPort = unreachablePort,
+            credentialsByTargetId = mapOf("target-a" to "target-token"),
+        ) { gatewayPort ->
+            val response = client.send(
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:$gatewayPort/mcp"))
+                    .header("Authorization", "Bearer gateway-token")
+                    .header("Content-Type", "application/json")
+                    .header("MCP-Protocol-Version", IJ_MCP_PROTOCOL_VERSION)
+                    .POST(
+                        HttpRequest.BodyPublishers.ofString(
+                            """{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}""",
+                        ),
+                    )
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+
+            assertEquals(200, response.statusCode())
+            assertContains(response.body(), "\"recoveryCode\":\"target_unreachable\"")
+            assertContains(response.body(), "\"recoveryAction\":\"Reopen the IDE window or run `targets list` and `targets select <targetId>`.\"")
         }
     }
 
@@ -209,6 +277,7 @@ class IjMcpGatewayPreflightTest {
 
     private fun withFakeTargetServer(
         observedRequests: MutableList<String>,
+        requiresPairing: Boolean = false,
         block: (port: Int) -> Unit,
     ) {
         val server = HttpServer.create(
@@ -220,7 +289,7 @@ class IjMcpGatewayPreflightTest {
                 observedRequests.add("health")
                 writeJsonResponse(
                     exchange,
-                    """{"protocolVersion":"$IJ_MCP_PROTOCOL_VERSION","requiresPairing":false,"running":true,"targetId":"target-a","projectName":"ij-mcp","projectPath":"/tmp/ij-mcp","endpointUrl":"http://127.0.0.1:${server.address.port}/mcp","port":${server.address.port}}""",
+                    """{"protocolVersion":"$IJ_MCP_PROTOCOL_VERSION","requiresPairing":$requiresPairing,"running":true,"targetId":"target-a","projectName":"ij-mcp","projectPath":"/tmp/ij-mcp","endpointUrl":"http://127.0.0.1:${server.address.port}/mcp","port":${server.address.port}}""",
                 )
             } finally {
                 exchange.close()

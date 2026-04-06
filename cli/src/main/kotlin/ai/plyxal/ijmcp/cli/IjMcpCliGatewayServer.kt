@@ -101,7 +101,7 @@ internal class IjMcpCliGatewayServer(
                     exchange,
                     jsonRpcErrorResponse(
                         requestBody = requestBody,
-                        message = exception.message ?: "Gateway target resolution failed.",
+                        failure = exception,
                     ),
                 )
                 return
@@ -116,7 +116,7 @@ internal class IjMcpCliGatewayServer(
                     exchange,
                     jsonRpcErrorResponse(
                         requestBody = requestBody,
-                        message = exception.message ?: "Gateway proxy request failed.",
+                        failure = exception,
                     ),
                 )
                 return
@@ -128,7 +128,12 @@ internal class IjMcpCliGatewayServer(
                     exchange,
                     jsonRpcErrorResponse(
                         requestBody = requestBody,
-                        message = "Stored credential for target ${target.registration.targetId} was rejected. Re-pair the target and retry.",
+                        failure = IjMcpTargetRouteFailure(
+                            recoveryCode = "repair_required",
+                            message = "Stored credential for target ${target.registration.targetId} was rejected.",
+                            recoveryAction = "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> ${target.registration.targetId}`.",
+                            selectedTargetId = target.registration.targetId,
+                        ),
                     ),
                 )
                 return
@@ -191,9 +196,11 @@ internal class IjMcpCliGatewayServer(
 
     private fun jsonRpcErrorResponse(
         requestBody: String,
-        message: String,
+        failure: Throwable,
     ): IjMcpHttpExchangeResult {
         val requestId = parseRequestId(requestBody)
+        val routeFailure = failure as? IjMcpTargetRouteFailure
+        val message = routeFailure?.message ?: failure.message ?: "Gateway request failed."
         return IjMcpHttpExchangeResult(
             statusCode = 200,
             body = json.encodeToString(
@@ -206,6 +213,18 @@ internal class IjMcpCliGatewayServer(
                         buildJsonObject {
                             put("code", -32000)
                             put("message", message)
+                            routeFailure?.let {
+                                put(
+                                    "data",
+                                    buildJsonObject {
+                                        put("recoveryCode", it.recoveryCode)
+                                        put("recoveryAction", it.recoveryAction)
+                                        it.selectedTargetId?.let { selectedTargetId ->
+                                            put("selectedTargetId", selectedTargetId)
+                                        }
+                                    },
+                                )
+                            }
                         },
                     )
                 },
