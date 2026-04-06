@@ -171,3 +171,49 @@ Expected result:
 * the CLI fails with an unavailable or unreachable target message
 * the CLI tells you to run `targets list` and `targets select <targetId>`
 * the CLI does not silently switch to another target
+
+## 9. Verify coding-agent gateway configuration
+
+Start the gateway in a dedicated shell:
+
+```bash
+./gradlew :cli:run --args='gateway serve'
+```
+
+In a second shell, print the gateway config:
+
+```bash
+./gradlew :cli:run --args='gateway config'
+```
+
+Export the bearer token:
+
+```bash
+export IJ_MCP_GATEWAY_TOKEN='<token from gateway config>'
+```
+
+If you want to follow the validated Codex CLI path, add the MCP entry:
+
+```bash
+codex mcp add ij-mcp \
+  --url http://127.0.0.1:3765/mcp \
+  --bearer-token-env-var IJ_MCP_GATEWAY_TOKEN
+codex mcp get ij-mcp
+```
+
+Then run the repo validation script:
+
+```bash
+./scripts/validate-agent-gateway-flow.sh
+```
+
+Expected result:
+
+* the gateway health endpoint reports `routingMode` as `sticky-selected-target`
+* `codex mcp get ij-mcp` shows the streamable HTTP gateway entry
+* the validation script creates or updates `.ijmcp-agent-validation.txt`
+* IntelliJ reveals and opens that file in the selected project window
+
+Detailed setup notes:
+
+* [Agent gateway setup](agent-gateway-setup.md)
