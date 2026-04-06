@@ -209,4 +209,5 @@ Useful commands after setup:
 * [Agent gateway setup](agent-gateway-setup.md)
 * [Installed IntelliJ validation](installed-instance-validation.md)
 * [Manual smoke verification](manual-smoke-verification.md)
+* [Troubleshooting and recovery](troubleshooting-and-recovery.md)
 * [Plugin lifecycle](plugin-lifecycle.md)
