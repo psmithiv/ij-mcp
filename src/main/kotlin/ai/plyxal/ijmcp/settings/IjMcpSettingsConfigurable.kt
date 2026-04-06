@@ -18,7 +18,6 @@ import com.intellij.util.ui.FormBuilder
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.datatransfer.StringSelection
-import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.swing.JButton
@@ -35,6 +34,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val settingsService = service<IjMcpSettingsService>()
     private val appService = service<IjMcpAppService>()
     private val dateFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneId.systemDefault())
+    private val pairingMessaging = IjMcpPairingMessaging(dateFormatter)
 
     private val enabledCheckBox = JCheckBox("Enable local MCP server")
     private val portSpinner = JSpinner(SpinnerNumberModel(8765, 0, 65535, 1))
@@ -53,10 +53,12 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         isEditable = false
         columns = 18
     }
-    private val pairingCodeExpiryLabel = JBLabel("Pairing code expiry: none issued")
-    private val generatePairingCodeButton = JButton("Pair CLI")
-    private val copyPairingCodeButton = JButton("Copy Code")
-    private val resetPairingButton = JButton("Reset Pairing")
+    private val pairingCodeExpiryLabel = JBLabel("Pairing code: no active code. Generate one when you are ready to pair a CLI or gateway.")
+    private val pairingWorkflowLabel = JBLabel("Pairing workflow: select a running target to generate a one-time code.")
+    private val resetImpactLabel = JBLabel("Reset impact: reset revokes existing CLI and gateway access for the selected target.")
+    private val generatePairingCodeButton = JButton("Generate Pairing Code")
+    private val copyPairingCodeButton = JButton("Copy Pairing Code")
+    private val resetPairingButton = JButton("Reset CLI Access")
     private val diagnosticsArea = JTextArea(10, 80).apply {
         isEditable = false
         lineWrap = false
@@ -68,6 +70,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private var cachedRegistrationsByTargetId: Map<String, IjMcpTargetRegistration> = emptyMap()
     private var selectedTargetId: String? = null
     private var pairingCodeTargetId: String? = null
+    private var activePairingCode: IssuedPairingCode? = null
 
     override fun getId(): String = "ai.plyxal.ijmcp.settings"
 
@@ -91,8 +94,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                     val issuedCode = appService.issuePairingCode(targetId)
                     ApplicationManager.getApplication().invokeLater {
                         if (issuedCode == null) {
+                            activePairingCode = null
                             pairingCodeField.text = ""
-                            pairingCodeExpiryLabel.text = "Pairing code expiry: target unavailable"
+                            pairingCodeExpiryLabel.text = "Pairing code: target unavailable. Refresh targets and retry."
                         } else {
                             renderPairingCode(issuedCode)
                         }
@@ -114,8 +118,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 ApplicationManager.getApplication().executeOnPooledThread {
                     appService.resetAuthentication(targetId)
                     ApplicationManager.getApplication().invokeLater {
+                        activePairingCode = null
                         pairingCodeField.text = ""
-                        pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
+                        pairingCodeExpiryLabel.text = "Pairing code: no active code. Existing CLI and gateway sessions must pair again."
                         refreshTargetData()
                     }
                 }
@@ -138,8 +143,10 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                         .addLabeledComponent("Endpoint", endpointStatusLabel)
                         .addLabeledComponent("Pairing Status", pairingStatusLabel)
                         .addLabeledComponent("Registry Status", registryStatusLabel)
+                        .addLabeledComponent("Pairing Workflow", pairingWorkflowLabel)
                         .addLabeledComponent("Pairing Code", pairingCodeField)
                         .addLabeledComponent("Code Expiry", pairingCodeExpiryLabel)
+                        .addLabeledComponent("Reset Impact", resetImpactLabel)
                         .addLabeledComponent("Diagnostics", JBScrollPane(diagnosticsArea))
                         .panel,
                     BorderLayout.NORTH,
@@ -195,8 +202,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         portSpinner.value = state.port
         renderCompatibility()
         renderStatus(appService.status())
+        activePairingCode = null
         pairingCodeField.text = ""
-        pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
+        pairingCodeExpiryLabel.text = "Pairing code: no active code. Generate one when you are ready to pair a CLI or gateway."
         refreshTargetData()
     }
 
@@ -206,6 +214,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         cachedRegistrationsByTargetId = emptyMap()
         selectedTargetId = null
         pairingCodeTargetId = null
+        activePairingCode = null
     }
 
     private fun refreshTargetData() {
@@ -286,8 +295,11 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             operatorGuidanceLabel.text = "Operator guidance: open a normal project window, then enable IJ-MCP."
             diagnosticsArea.text = buildNoTargetDiagnostics()
             pairingCodeTargetId = null
+            activePairingCode = null
             pairingCodeField.text = ""
-            pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
+            pairingWorkflowLabel.text = "Pairing workflow: select a running target to generate a one-time code."
+            pairingCodeExpiryLabel.text = "Pairing code: no active code. Generate one when you are ready to pair a CLI or gateway."
+            resetImpactLabel.text = "Reset impact: reset revokes existing CLI and gateway access for the selected target."
             copyPairingCodeButton.isEnabled = pairingCodeField.text.isNotBlank()
             generatePairingCodeButton.isEnabled = false
             resetPairingButton.isEnabled = false
@@ -298,8 +310,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         val registration = cachedRegistrationsByTargetId[status.descriptor.targetId]
 
         if (pairingCodeTargetId != status.descriptor.targetId) {
+            activePairingCode = null
             pairingCodeField.text = ""
-            pairingCodeExpiryLabel.text = "Pairing code expiry: none issued"
+            pairingCodeExpiryLabel.text = pairingMessaging.codeExpiry(null)
             pairingCodeTargetId = null
         }
 
@@ -320,6 +333,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         } else {
             "Registry status: registered at ${registration.lastSeenAt}"
         }
+        pairingWorkflowLabel.text = "Pairing workflow: ${pairingMessaging.pairingWorkflow(status, activePairingCode)}"
+        resetImpactLabel.text = "Reset impact: ${pairingMessaging.resetImpact(status, activePairingCode)}"
+        pairingCodeExpiryLabel.text = pairingMessaging.codeExpiry(activePairingCode)
         operatorGuidanceLabel.text = buildTargetGuidance(status)
         diagnosticsArea.text = buildDiagnostics(status, registration)
         generatePairingCodeButton.isEnabled = true
@@ -329,8 +345,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
 
     private fun renderPairingCode(issuedCode: IssuedPairingCode) {
         pairingCodeTargetId = selectedTargetId
+        activePairingCode = issuedCode
         pairingCodeField.text = issuedCode.code
-        pairingCodeExpiryLabel.text = "Pairing code expiry: ${formatInstant(issuedCode.expiresAt)}"
+        pairingCodeExpiryLabel.text = pairingMessaging.codeExpiry(issuedCode)
         copyPairingCodeButton.isEnabled = true
     }
 
@@ -341,6 +358,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         pairingStatusLabel.text = "Pairing status: refreshing..."
         registryStatusLabel.text = "Registry status: refreshing..."
         operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
+        pairingWorkflowLabel.text = "Pairing workflow: refreshing target state..."
         diagnosticsArea.text = "Refreshing target state..."
         generatePairingCodeButton.isEnabled = false
         resetPairingButton.isEnabled = false
@@ -349,8 +367,11 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
 
     private fun setPairingBusyState(message: String) {
         pairingCodeTargetId = null
+        activePairingCode = null
         pairingCodeField.text = ""
-        pairingCodeExpiryLabel.text = message
+        pairingWorkflowLabel.text = "Pairing workflow: $message"
+        pairingCodeExpiryLabel.text = "Pairing code: $message"
+        resetImpactLabel.text = "Reset impact: wait for the current operation to finish before changing access."
         copyPairingCodeButton.isEnabled = false
         generatePairingCodeButton.isEnabled = false
         resetPairingButton.isEnabled = false
@@ -414,7 +435,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             configuredPort != 0 && status.port != configuredPort ->
                 "Operator guidance: preferred port $configuredPort was unavailable; this target is running on ${status.port}. Re-discover or re-pair clients that expected the preferred port."
             status.requiresPairing ->
-                "Operator guidance: the target is live. Use Pair CLI to authorize the companion CLI or coding agent."
+                "Operator guidance: the target is live. Generate a pairing code to authorize the companion CLI or coding agent."
             else ->
                 "Operator guidance: the target is live and paired."
         }
@@ -463,8 +484,6 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             appendLine("registry=<missing>")
         }
     }
-
-    private fun formatInstant(instant: Instant): String = dateFormatter.format(instant)
 
     private data class TargetOption(
         val targetId: String,
