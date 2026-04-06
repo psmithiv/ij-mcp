@@ -27,6 +27,16 @@ internal class IjMcpSelectedTargetResolver(
     }
 
     fun resolveSelectedConnectedTarget(): Result<IjMcpResolvedTarget> = runCatching {
+        val target = resolveSelectedHealthyTarget().getOrElse { exception ->
+            throw exception
+        }
+        initializeTarget(target).getOrElse { exception ->
+            throw exception
+        }
+        target
+    }
+
+    fun resolveSelectedHealthyTarget(): Result<IjMcpResolvedTarget> = runCatching {
         val state = stateStore.load()
         val selectedTargetId = state.selectedTargetId
         if (selectedTargetId.isNullOrBlank()) {
@@ -59,18 +69,18 @@ internal class IjMcpSelectedTargetResolver(
             )
         }
 
-        val resolvedTarget = IjMcpResolvedTarget(
+        IjMcpResolvedTarget(
             registration = registration,
             health = health,
             bearerToken = bearerToken,
         )
+    }
 
-        httpClient.initialize(resolvedTarget).getOrElse { exception ->
+    fun initializeTarget(target: IjMcpResolvedTarget): Result<Unit> = runCatching {
+        httpClient.initialize(target).getOrElse { exception ->
             throw IllegalStateException(
-                "Initialization against target $selectedTargetId failed: ${exception.message}. Re-pair the target if credentials were reset.",
+                "Initialization against target ${target.registration.targetId} failed: ${exception.message}. Re-pair the target if credentials were reset.",
             )
         }
-
-        resolvedTarget
     }
 }

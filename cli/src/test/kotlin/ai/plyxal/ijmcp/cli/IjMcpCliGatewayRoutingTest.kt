@@ -56,7 +56,7 @@ class IjMcpCliGatewayRoutingTest {
 
                 IjMcpCliGatewayServer(
                     config = IjMcpGatewayConfig(port = 0, bearerToken = "gateway-token"),
-                    targetResolver = { resolver.resolveSelectedConnectedTarget() },
+                    preflight = IjMcpGatewayPreflight(resolver),
                     routeSummaryProvider = { resolver.describeStickyRoute() },
                 ).use { gatewayServer ->
                     val gatewayPort = gatewayServer.start(IjMcpGatewayServerConfig(port = 0))
@@ -125,7 +125,7 @@ class IjMcpCliGatewayRoutingTest {
 
             IjMcpCliGatewayServer(
                 config = IjMcpGatewayConfig(port = 0, bearerToken = "gateway-token"),
-                targetResolver = { resolver.resolveSelectedConnectedTarget() },
+                preflight = IjMcpGatewayPreflight(resolver),
                 routeSummaryProvider = { resolver.describeStickyRoute() },
             ).use { gatewayServer ->
                 val gatewayPort = gatewayServer.start(IjMcpGatewayServerConfig(port = 0))

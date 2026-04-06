@@ -280,10 +280,11 @@ internal class IjMcpCli(
     private fun serveGateway(): Int {
         val gatewayConfig = ensureGatewayConfig()
         val latch = CountDownLatch(1)
+        val gatewayPreflight = IjMcpGatewayPreflight(selectedTargetResolver)
 
         IjMcpCliGatewayServer(
             config = gatewayConfig,
-            targetResolver = { selectedTargetResolver.resolveSelectedConnectedTarget() },
+            preflight = gatewayPreflight,
             routeSummaryProvider = { selectedTargetResolver.describeStickyRoute() },
             httpClient = httpClient,
         ).use { server ->

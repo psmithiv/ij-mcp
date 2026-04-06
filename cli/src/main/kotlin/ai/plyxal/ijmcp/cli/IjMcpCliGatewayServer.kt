@@ -21,7 +21,7 @@ internal data class IjMcpGatewayServerConfig(
 
 internal class IjMcpCliGatewayServer(
     private val config: IjMcpGatewayConfig,
-    private val targetResolver: () -> Result<IjMcpResolvedTarget>,
+    private val preflight: IjMcpGatewayPreflight,
     private val routeSummaryProvider: () -> IjMcpSelectedTargetRouteSummary,
     private val httpClient: IjMcpCliHttpClient = IjMcpCliHttpClient(),
     private val executor: ExecutorService = Executors.newCachedThreadPool(),
@@ -95,7 +95,8 @@ internal class IjMcpCliGatewayServer(
             }
 
             val requestBody = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            val target = targetResolver().getOrElse { exception ->
+            val requestMethod = parseRequestMethod(requestBody)
+            val target = preflight.prepareFor(requestMethod).getOrElse { exception ->
                 writeResponse(
                     exchange,
                     jsonRpcErrorResponse(
@@ -119,6 +120,22 @@ internal class IjMcpCliGatewayServer(
                     ),
                 )
                 return
+            }
+
+            if (upstreamResponse.statusCode == 401) {
+                preflight.clearInitialization()
+                writeResponse(
+                    exchange,
+                    jsonRpcErrorResponse(
+                        requestBody = requestBody,
+                        message = "Stored credential for target ${target.registration.targetId} was rejected. Re-pair the target and retry.",
+                    ),
+                )
+                return
+            }
+
+            if (requestMethod == "initialize" && upstreamResponse.statusCode == 200 && !containsJsonRpcError(upstreamResponse.body)) {
+                preflight.markInitialized(target.registration.targetId)
             }
 
             writeResponse(exchange, upstreamResponse)
@@ -161,6 +178,7 @@ internal class IjMcpCliGatewayServer(
                             routeSummary.selectedTargetId?.let { put("selectedTargetId", it) }
                             routeSummary.projectName?.let { put("selectedProjectName", it) }
                             routeSummary.endpointUrl?.let { put("selectedTargetEndpointUrl", it) }
+                            preflight.initializedTargetId()?.let { put("initializedTargetId", it) }
                             put("requiresAuth", true)
                         },
                     ),
@@ -199,6 +217,14 @@ internal class IjMcpCliGatewayServer(
     private fun parseRequestId(requestBody: String): JsonElement = runCatching {
         json.parseToJsonElement(requestBody).jsonObject["id"] ?: JsonNull
     }.getOrDefault(JsonNull)
+
+    private fun parseRequestMethod(requestBody: String): String? = runCatching {
+        json.parseToJsonElement(requestBody).jsonObject["method"]?.toString()?.trim('"')
+    }.getOrNull()
+
+    private fun containsJsonRpcError(responseBody: String?): Boolean = runCatching {
+        responseBody != null && json.parseToJsonElement(responseBody).jsonObject.containsKey("error")
+    }.getOrDefault(false)
 
     private fun isAuthorized(authorizationHeader: String?): Boolean {
         val token = authorizationHeader
