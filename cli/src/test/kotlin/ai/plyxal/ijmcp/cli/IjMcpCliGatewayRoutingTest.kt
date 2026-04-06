@@ -144,7 +144,9 @@ class IjMcpCliGatewayRoutingTest {
                 )
 
                 assertEquals(200, response.statusCode())
-                assertContains(response.body(), "\"message\":\"Selected target target-missing is unavailable.")
+                assertContains(response.body(), "\"message\":\"Selected target target-missing is unavailable.\"")
+                assertContains(response.body(), "\"recoveryCode\":\"stale_target\"")
+                assertContains(response.body(), "\"recoveryAction\":\"Run `targets list` and `targets select <targetId>`.\"")
                 assertEquals(emptyList(), targetBRequests.toList())
             }
         }

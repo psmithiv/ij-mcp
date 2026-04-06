@@ -40,32 +40,55 @@ internal class IjMcpSelectedTargetResolver(
         val state = stateStore.load()
         val selectedTargetId = state.selectedTargetId
         if (selectedTargetId.isNullOrBlank()) {
-            throw IllegalStateException(
-                "No sticky target is selected. Run `targets list` and `targets select <targetId>`.",
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "no_selection",
+                message = "No sticky target is selected.",
+                recoveryAction = "Run `targets list` and `targets select <targetId>`.",
             )
         }
 
         val registration = registryReader.readTargets().firstOrNull { it.targetId == selectedTargetId }
-            ?: throw IllegalStateException(
-                "Selected target $selectedTargetId is unavailable. Run `targets list` and `targets select <targetId>`.",
+            ?: throw IjMcpTargetRouteFailure(
+                recoveryCode = "stale_target",
+                message = "Selected target $selectedTargetId is unavailable.",
+                recoveryAction = "Run `targets list` and `targets select <targetId>`.",
+                selectedTargetId = selectedTargetId,
             )
 
         val bearerToken = state.credentialsByTargetId[selectedTargetId]
         if (bearerToken.isNullOrBlank()) {
-            throw IllegalStateException(
-                "No stored credential exists for target $selectedTargetId. Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "pairing_required",
+                message = "No stored credential exists for target $selectedTargetId.",
+                recoveryAction = "Issue a pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
+                selectedTargetId = selectedTargetId,
             )
         }
 
         val health = httpClient.health(registration).getOrElse { exception ->
-            throw IllegalStateException(
-                "Selected target $selectedTargetId is unreachable: ${exception.message}. Reopen the IDE window or run `targets list` and `targets select <targetId>`.",
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "target_unreachable",
+                message = "Selected target $selectedTargetId is unreachable: ${exception.message}",
+                recoveryAction = "Reopen the IDE window or run `targets list` and `targets select <targetId>`.",
+                selectedTargetId = selectedTargetId,
+            )
+        }
+
+        if (health.requiresPairing) {
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "pairing_required",
+                message = "Target $selectedTargetId currently requires pairing.",
+                recoveryAction = "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> $selectedTargetId`.",
+                selectedTargetId = selectedTargetId,
             )
         }
 
         if (!health.running) {
-            throw IllegalStateException(
-                "Selected target $selectedTargetId is registered but not running. Reopen the IDE window or refresh plugin settings.",
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "target_not_running",
+                message = "Selected target $selectedTargetId is registered but not running.",
+                recoveryAction = "Reopen the IDE window or refresh plugin settings.",
+                selectedTargetId = selectedTargetId,
             )
         }
 
@@ -78,8 +101,21 @@ internal class IjMcpSelectedTargetResolver(
 
     fun initializeTarget(target: IjMcpResolvedTarget): Result<Unit> = runCatching {
         httpClient.initialize(target).getOrElse { exception ->
-            throw IllegalStateException(
-                "Initialization against target ${target.registration.targetId} failed: ${exception.message}. Re-pair the target if credentials were reset.",
+            val message = exception.message ?: "Initialization failed."
+            if ("401" in message || "Unauthorized" in message) {
+                throw IjMcpTargetRouteFailure(
+                    recoveryCode = "repair_required",
+                    message = "Initialization against target ${target.registration.targetId} failed: $message",
+                    recoveryAction = "Issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> ${target.registration.targetId}`.",
+                    selectedTargetId = target.registration.targetId,
+                )
+            }
+
+            throw IjMcpTargetRouteFailure(
+                recoveryCode = "initialize_failed",
+                message = "Initialization against target ${target.registration.targetId} failed: $message",
+                recoveryAction = "Retry the request. If the target was reset, issue a new pairing code in the plugin UI and run `targets pair --code <pairingCode> ${target.registration.targetId}`.",
+                selectedTargetId = target.registration.targetId,
             )
         }
     }
