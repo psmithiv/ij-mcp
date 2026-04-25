@@ -86,7 +86,7 @@ The v1 implementation currently covers:
 * local registry discovery and sticky CLI target selection
 * pair-once authentication with per-target bearer tokens
 * MCP lifecycle and `tools/list` / `tools/call`
-* `open_file`, `focus_tab`, `list_open_tabs`, `close_tab`, `reveal_file_in_project`, and `get_active_editor_context`
+* `open_file`, `focus_tab`, `list_open_tabs`, `close_tab`, `reveal_file_in_project`, `get_active_editor_context`, `move_caret`, and `select_editor_range`
 * `search_files` and `search_symbols`
 * fail-closed behavior for missing auth, stale target selection, and outside-project file access
 

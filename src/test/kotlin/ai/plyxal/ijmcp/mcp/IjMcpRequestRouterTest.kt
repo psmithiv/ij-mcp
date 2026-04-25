@@ -55,10 +55,13 @@ class IjMcpRequestRouterTest {
 
         val body = json.parseToJsonElement(requireNotNull(response.body)).jsonObject
         val tools = body.getValue("result").jsonObject.getValue("tools").jsonArray
+        val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
 
         assertEquals(200, response.statusCode)
-        assertEquals(8, tools.size)
+        assertEquals(10, tools.size)
         assertEquals("open_file", tools.first().jsonObject.getValue("name").jsonPrimitive.content)
+        assertTrue(toolNames.contains("move_caret"))
+        assertTrue(toolNames.contains("select_editor_range"))
     }
 
     @Test

@@ -242,6 +242,95 @@ internal object IjMcpToolCatalog {
                 idempotentHint = true,
             ),
             toolDescriptor(
+                name = "move_caret",
+                title = "Move Caret",
+                description = "Move the caret in the active editor or in a targeted project file.",
+                inputSchema = schemaObject(
+                    required = listOf("line"),
+                    properties = linkedMapOf(
+                        "path" to stringSchema(
+                            minLength = 1,
+                            description = "Optional project-relative path or absolute path within the active project.",
+                        ),
+                        "line" to integerSchema(minimum = 1),
+                        "column" to integerSchema(minimum = 1, defaultValue = 1),
+                    ),
+                ),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName", "path", "absolutePath", "caret"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                        "path" to stringSchema(),
+                        "absolutePath" to stringSchema(),
+                        "caret" to objectSchema(
+                            required = listOf("line", "column"),
+                            properties = linkedMapOf(
+                                "line" to integerSchema(minimum = 1),
+                                "column" to integerSchema(minimum = 1),
+                            ),
+                            includeSchema = false,
+                        ),
+                    ),
+                ),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "select_editor_range",
+                title = "Select Editor Range",
+                description = "Select a 1-based logical range in the active editor or in a targeted project file.",
+                inputSchema = schemaObject(
+                    required = listOf("startLine", "startColumn", "endLine", "endColumn"),
+                    properties = linkedMapOf(
+                        "path" to stringSchema(
+                            minLength = 1,
+                            description = "Optional project-relative path or absolute path within the active project.",
+                        ),
+                        "startLine" to integerSchema(minimum = 1),
+                        "startColumn" to integerSchema(minimum = 1),
+                        "endLine" to integerSchema(minimum = 1),
+                        "endColumn" to integerSchema(minimum = 1),
+                    ),
+                ),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName", "path", "absolutePath", "selection", "hasSelection"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                        "path" to stringSchema(),
+                        "absolutePath" to stringSchema(),
+                        "selection" to objectSchema(
+                            required = listOf("startLine", "startColumn", "endLine", "endColumn"),
+                            properties = linkedMapOf(
+                                "startLine" to integerSchema(minimum = 1),
+                                "startColumn" to integerSchema(minimum = 1),
+                                "endLine" to integerSchema(minimum = 1),
+                                "endColumn" to integerSchema(minimum = 1),
+                            ),
+                            includeSchema = false,
+                        ),
+                        "caret" to objectSchema(
+                            required = listOf("line", "column"),
+                            properties = linkedMapOf(
+                                "line" to integerSchema(minimum = 1),
+                                "column" to integerSchema(minimum = 1),
+                            ),
+                            includeSchema = false,
+                        ),
+                        "hasSelection" to booleanSchema(),
+                    ),
+                ),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
                 name = "search_files",
                 title = "Search Files",
                 description = "Search project files by name using IntelliJ-aware indexing.",
