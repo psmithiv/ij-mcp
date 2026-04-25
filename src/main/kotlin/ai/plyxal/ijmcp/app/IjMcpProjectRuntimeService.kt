@@ -12,6 +12,7 @@ import ai.plyxal.ijmcp.mcp.IjMcpToolRegistry
 import ai.plyxal.ijmcp.model.IjMcpTargetDescriptor
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.intellij.openapi.application.ApplicationInfo
+import com.intellij.openapi.application.ApplicationManager
 import ai.plyxal.ijmcp.settings.IjMcpSecretStore
 import ai.plyxal.ijmcp.settings.IjMcpSettingsService
 import com.intellij.openapi.Disposable
@@ -53,6 +54,7 @@ class IjMcpProjectRuntimeService(
         security = authManager,
         statusProvider = ::currentStatus,
         onAuthenticationStateChanged = ::refreshRegistrationState,
+        internalPairingCodeIssuer = if (ApplicationManager.getApplication().isInternal) ::issuePairingCode else null,
     )
     private val descriptor = IjMcpTargetDescriptor(
         targetId = targetId,

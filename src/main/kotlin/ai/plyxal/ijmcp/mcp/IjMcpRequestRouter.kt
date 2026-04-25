@@ -49,7 +49,11 @@ internal class IjMcpRequestRouter(
         val method = request["method"].stringContent()
             ?: return jsonRpcErrorResponse(requestId, -32600, "Invalid Request")
 
-        if (method != "initialize" && protocolVersionHeader != IjMcpProtocol.protocolVersion) {
+        if (
+            method != "initialize" &&
+            protocolVersionHeader != null &&
+            protocolVersionHeader != IjMcpProtocol.protocolVersion
+        ) {
             return IjMcpHttpResponse(
                 statusCode = 400,
                 body = "Unsupported MCP-Protocol-Version header.",

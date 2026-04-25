@@ -5,8 +5,11 @@ import ai.plyxal.ijmcp.model.IjMcpTargetDescriptor
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -88,6 +91,36 @@ class IjMcpTargetRegistryStoreTest {
 
         assertTrue(store.readTargets().isEmpty())
         assertTrue(Files.readString(registryRoot.resolve("targets.json")).contains("\"targets\": []"))
+    }
+
+    @Test
+    fun readTargetsTimesOutWhenRegistryLockCannotBeAcquired() {
+        val registryRoot = Files.createTempDirectory("ijmcp-registry-lock-timeout")
+        val store = IjMcpTargetRegistryStore(
+            registryRoot = registryRoot,
+            lockTimeout = Duration.ofMillis(150),
+            lockRetryDelay = Duration.ofMillis(10),
+        )
+        val lockFile = registryRoot.resolve("targets.lock")
+
+        FileChannel.open(
+            lockFile,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.WRITE,
+        ).use { channel ->
+            channel.lock().use {
+                val startedAt = System.nanoTime()
+
+                try {
+                    store.readTargets()
+                    fail("Expected registry lock acquisition to time out.")
+                } catch (exception: IjMcpTargetRegistryLockTimeoutException) {
+                    val elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
+                    assertTrue(exception.message!!.contains("targets.lock"))
+                    assertTrue("Expected timeout within one second, elapsed=$elapsed", elapsed < Duration.ofSeconds(1))
+                }
+            }
+        }
     }
 
     private fun sampleStatus(

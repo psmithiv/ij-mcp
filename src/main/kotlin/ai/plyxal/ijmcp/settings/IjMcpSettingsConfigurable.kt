@@ -8,6 +8,7 @@ import ai.plyxal.ijmcp.model.IjMcpTargetRegistration
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.SearchableConfigurable
@@ -33,6 +34,7 @@ import javax.swing.SpinnerNumberModel
 class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val settingsService = service<IjMcpSettingsService>()
     private val appService = service<IjMcpAppService>()
+    private val agentGatewayStateStore = IjMcpAgentGatewayStateStore()
     private val dateFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneId.systemDefault())
     private val pairingMessaging = IjMcpPairingMessaging(dateFormatter)
 
@@ -75,6 +77,27 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val generatePairingCodeButton = JButton("Generate Pairing Code")
     private val copyPairingCodeButton = JButton("Copy Pairing Code")
     private val resetPairingButton = JButton("Reset CLI Access")
+    private val agentSetupArea = JTextArea(3, 80).apply {
+        isEditable = false
+        lineWrap = true
+        wrapStyleWord = true
+    }
+    private val gatewayTokenExportField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val codexCommandField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val exactMcpConfigArea = JTextArea(4, 80).apply {
+        isEditable = false
+        lineWrap = false
+        wrapStyleWord = false
+    }
+    private val copyGatewayTokenButton = JButton("Copy Token Export")
+    private val copyCodexCommandButton = JButton("Copy Codex Command")
+    private val copyMcpConfigButton = JButton("Copy MCP Config")
     private val diagnosticsArea = JTextArea(10, 80).apply {
         isEditable = false
         lineWrap = false
@@ -107,16 +130,19 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 val targetId = selectedTargetId ?: return@addActionListener
                 setPairingBusyState("Generating pairing code...")
                 ApplicationManager.getApplication().executeOnPooledThread {
-                    val issuedCode = appService.issuePairingCode(targetId)
-                    ApplicationManager.getApplication().invokeLater {
-                        if (issuedCode == null) {
-                            activePairingCode = null
-                            pairingCodeField.text = ""
-                            pairingCodeExpiryLabel.text = "Pairing code: target unavailable. Refresh targets and retry."
-                        } else {
-                            renderPairingCode(issuedCode)
+                    val result = runCatching {
+                        appService.issuePairingCode(targetId)
+                            ?: error("The selected target is no longer available. Refresh targets and retry.")
+                    }
+                    invokeOnSettingsUiThread {
+                        refreshTargetData {
+                            result.fold(
+                                onSuccess = ::renderPairingCode,
+                                onFailure = { exception ->
+                                    renderPairingFailure("Failed to generate a pairing code. ${exception.message ?: "Retry after refreshing targets."}")
+                                },
+                            )
                         }
-                        refreshTargetData()
                     }
                 }
             }
@@ -128,16 +154,50 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 }
             }
 
+            copyGatewayTokenButton.addActionListener {
+                val exportCommand = gatewayTokenExportField.text.trim()
+                if (exportCommand.isNotEmpty()) {
+                    CopyPasteManager.getInstance().setContents(StringSelection(exportCommand))
+                }
+            }
+
+            copyCodexCommandButton.addActionListener {
+                val codexCommand = codexCommandField.text.trim()
+                if (codexCommand.isNotEmpty()) {
+                    CopyPasteManager.getInstance().setContents(StringSelection(codexCommand))
+                }
+            }
+
+            copyMcpConfigButton.addActionListener {
+                val mcpConfig = exactMcpConfigArea.text.trim()
+                if (mcpConfig.isNotEmpty()) {
+                    CopyPasteManager.getInstance().setContents(StringSelection(mcpConfig))
+                }
+            }
+
             resetPairingButton.addActionListener {
                 val targetId = selectedTargetId ?: return@addActionListener
                 setPairingBusyState("Resetting pairing...")
                 ApplicationManager.getApplication().executeOnPooledThread {
-                    appService.resetAuthentication(targetId)
-                    ApplicationManager.getApplication().invokeLater {
-                        activePairingCode = null
-                        pairingCodeField.text = ""
-                        pairingCodeExpiryLabel.text = "Pairing code: no active code. Existing CLI and gateway sessions must pair again."
-                        refreshTargetData()
+                    val result = runCatching {
+                        check(appService.resetAuthentication(targetId)) {
+                            "The selected target is no longer available. Refresh targets and retry."
+                        }
+                    }
+                    invokeOnSettingsUiThread {
+                        refreshTargetData {
+                            result.fold(
+                                onSuccess = {
+                                    activePairingCode = null
+                                    pairingCodeField.text = ""
+                                    pairingCodeExpiryLabel.text = "Pairing code: no active code. Existing CLI and gateway sessions must pair again."
+                                    renderAgentSetup(selectedTargetStatus())
+                                },
+                                onFailure = { exception ->
+                                    renderPairingFailure("Failed to reset CLI access. ${exception.message ?: "Retry after refreshing targets."}")
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -147,6 +207,12 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 add(generatePairingCodeButton)
                 add(copyPairingCodeButton)
                 add(resetPairingButton)
+            }
+
+            val agentActionsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+                add(copyGatewayTokenButton)
+                add(copyCodexCommandButton)
+                add(copyMcpConfigButton)
             }
 
             val targetPanel = JPanel(BorderLayout()).apply {
@@ -167,6 +233,11 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                         .addLabeledComponent("Pairing Code", pairingCodeField)
                         .addLabeledComponent("Code Expiry", pairingCodeExpiryLabel)
                         .addLabeledComponent("Reset Impact", resetImpactLabel)
+                        .addLabeledComponent("Agent Setup", JBScrollPane(agentSetupArea))
+                        .addLabeledComponent("Gateway Token Export", gatewayTokenExportField)
+                        .addLabeledComponent("Codex CLI Command", codexCommandField)
+                        .addComponent(agentActionsPanel)
+                        .addLabeledComponent("Exact MCP Config", JBScrollPane(exactMcpConfigArea))
                         .addLabeledComponent("Diagnostics", JBScrollPane(diagnosticsArea))
                         .panel,
                     BorderLayout.NORTH,
@@ -208,9 +279,13 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         serverStatusLabel.text = "Applying settings..."
 
         ApplicationManager.getApplication().executeOnPooledThread {
-            val status = appService.applyConfiguredState()
-            ApplicationManager.getApplication().invokeLater {
-                renderStatus(status)
+            val result = runCatching { appService.applyConfiguredState() }
+            invokeOnSettingsUiThread {
+                result
+                    .onSuccess(::renderStatus)
+                    .onFailure { exception ->
+                        serverStatusLabel.text = "Stopped: ${exception.message ?: "Failed to apply settings."}"
+                    }
                 refreshTargetData()
             }
         }
@@ -225,6 +300,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         activePairingCode = null
         pairingCodeField.text = ""
         pairingCodeExpiryLabel.text = "Pairing code: no active code. Generate one when you are ready to pair a CLI or gateway."
+        renderAgentSetup(null)
         refreshTargetData()
     }
 
@@ -237,19 +313,28 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         activePairingCode = null
     }
 
-    private fun refreshTargetData() {
+    private fun refreshTargetData(afterRefresh: (() -> Unit)? = null) {
         setTargetLoadingState()
         ApplicationManager.getApplication().executeOnPooledThread {
-            val targetStatuses = appService.targetStatuses()
-            val registrations = appService.targetRegistryStore()
-                .readTargets()
-                .associateBy { it.targetId }
+            val targetStatusesResult = runCatching { appService.targetStatuses() }
+            val registrationsResult = runCatching {
+                appService.targetRegistryStore()
+                    .readTargets()
+                    .associateBy { it.targetId }
+            }
 
-            ApplicationManager.getApplication().invokeLater {
-                cachedTargetStatuses = targetStatuses
-                cachedRegistrationsByTargetId = registrations
+            invokeOnSettingsUiThread {
+                cachedTargetStatuses = targetStatusesResult.getOrDefault(emptyList())
+                cachedRegistrationsByTargetId = registrationsResult.getOrDefault(emptyMap())
                 renderTargetSelector()
                 renderSelectedTarget()
+                targetStatusesResult.exceptionOrNull()?.let { exception ->
+                    renderRefreshFailure("Failed to refresh target state. ${exception.message ?: "Retry the action."}")
+                }
+                registrationsResult.exceptionOrNull()?.let { exception ->
+                    renderRefreshFailure("Failed to refresh target registry. ${exception.message ?: "Retry the action."}")
+                }
+                afterRefresh?.invoke()
             }
         }
     }
@@ -327,6 +412,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             copyPairingCodeButton.isEnabled = pairingCodeField.text.isNotBlank()
             generatePairingCodeButton.isEnabled = false
             resetPairingButton.isEnabled = false
+            renderAgentSetup(null)
             return
         }
 
@@ -369,6 +455,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         generatePairingCodeButton.isEnabled = true
         resetPairingButton.isEnabled = true
         copyPairingCodeButton.isEnabled = pairingCodeField.text.isNotBlank()
+        renderAgentSetup(status)
     }
 
     private fun renderPairingCode(issuedCode: IssuedPairingCode) {
@@ -377,6 +464,21 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         pairingCodeField.text = issuedCode.code
         pairingCodeExpiryLabel.text = pairingMessaging.codeExpiry(issuedCode)
         copyPairingCodeButton.isEnabled = true
+        renderAgentSetup(selectedTargetStatus())
+    }
+
+    private fun renderPairingFailure(message: String) {
+        pairingCodeTargetId = selectedTargetId
+        activePairingCode = null
+        pairingCodeField.text = ""
+        pairingWorkflowLabel.text = "Pairing workflow: $message"
+        pairingCodeExpiryLabel.text = "Pairing code: $message"
+        resetImpactLabel.text = "Reset impact: resolve the current error before retrying access changes."
+        lastErrorField.text = message
+        copyPairingCodeButton.isEnabled = false
+        generatePairingCodeButton.isEnabled = selectedTargetId != null
+        resetPairingButton.isEnabled = selectedTargetId != null
+        renderAgentSetup(selectedTargetStatus())
     }
 
     private fun setTargetLoadingState() {
@@ -391,10 +493,23 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         lastErrorField.text = "Refreshing last error..."
         operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
         pairingWorkflowLabel.text = "Pairing workflow: refreshing target state..."
+        agentSetupArea.text = "Preparing the exact coding-agent configuration..."
         diagnosticsArea.text = "Refreshing target state..."
         generatePairingCodeButton.isEnabled = false
         resetPairingButton.isEnabled = false
         copyPairingCodeButton.isEnabled = pairingCodeField.text.isNotBlank()
+    }
+
+    private fun renderRefreshFailure(message: String) {
+        lastErrorField.text = message
+        operatorGuidanceLabel.text = "Operator guidance: $message"
+        if (diagnosticsArea.text.isBlank() || diagnosticsArea.text == "Refreshing target state...") {
+            diagnosticsArea.text = message
+        } else {
+            diagnosticsArea.text = "${diagnosticsArea.text}\n$message"
+        }
+        generatePairingCodeButton.isEnabled = selectedTargetId != null
+        resetPairingButton.isEnabled = selectedTargetId != null
     }
 
     private fun setPairingBusyState(message: String) {
@@ -407,6 +522,49 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         copyPairingCodeButton.isEnabled = false
         generatePairingCodeButton.isEnabled = false
         resetPairingButton.isEnabled = false
+        agentSetupArea.text = "Refreshing the exact coding-agent configuration..."
+    }
+
+    private fun renderAgentSetup(status: IjMcpTargetStatus?) {
+        val setupSummary = runCatching {
+            IjMcpAgentSetupSummaryBuilder.build(
+                gatewayConfig = agentGatewayStateStore.ensureGatewayConfig(),
+                targetStatus = status,
+                pairingCode = activePairingCode,
+            )
+        }.getOrElse { exception ->
+            renderAgentSetupFailure("Unable to build the coding-agent configuration. ${exception.message ?: "Retry after refreshing targets."}")
+            return
+        }
+
+        agentSetupArea.text = setupSummary.guidance
+        gatewayTokenExportField.text = setupSummary.gatewayTokenExportCommand
+        codexCommandField.text = setupSummary.codexCommand
+        exactMcpConfigArea.text = setupSummary.exactConfig
+        copyGatewayTokenButton.isEnabled = gatewayTokenExportField.text.isNotBlank()
+        copyCodexCommandButton.isEnabled = codexCommandField.text.isNotBlank()
+        copyMcpConfigButton.isEnabled = exactMcpConfigArea.text.isNotBlank()
+    }
+
+    private fun renderAgentSetupFailure(message: String) {
+        agentSetupArea.text = message
+        gatewayTokenExportField.text = ""
+        codexCommandField.text = ""
+        exactMcpConfigArea.text = ""
+        copyGatewayTokenButton.isEnabled = false
+        copyCodexCommandButton.isEnabled = false
+        copyMcpConfigButton.isEnabled = false
+    }
+
+    private fun selectedTargetStatus(): IjMcpTargetStatus? = cachedTargetStatuses
+        .firstOrNull { it.descriptor.targetId == selectedTargetId }
+
+    private fun invokeOnSettingsUiThread(action: () -> Unit) {
+        val uiComponent = component ?: return
+        ApplicationManager.getApplication().invokeLater(
+            { if (component != null) action() },
+            ModalityState.stateForComponent(uiComponent),
+        )
     }
 
     private fun renderCompatibility() {

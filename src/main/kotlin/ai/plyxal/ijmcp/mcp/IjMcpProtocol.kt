@@ -4,6 +4,7 @@ internal object IjMcpProtocol {
     const val endpointPath = "/mcp"
     const val healthPath = "/health"
     const val pairingPath = "/pair"
+    const val internalPairingCodePath = "/internal/pairing-code"
     const val jsonRpcVersion = "2.0"
     const val protocolVersion = "2025-11-25"
     const val defaultPort = 8765

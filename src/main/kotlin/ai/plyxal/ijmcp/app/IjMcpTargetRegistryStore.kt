@@ -7,6 +7,7 @@ import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.intellij.openapi.diagnostic.thisLogger
 import kotlinx.serialization.json.Json
 import java.nio.channels.FileChannel
+import java.nio.channels.OverlappingFileLockException
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -21,6 +22,8 @@ internal class IjMcpTargetRegistryStore(
     private val registryRoot: Path = defaultRegistryRoot(),
     private val clock: Clock = Clock.systemUTC(),
     private val staleAfter: Duration = Duration.ofSeconds(45),
+    private val lockTimeout: Duration = Duration.ofSeconds(2),
+    private val lockRetryDelay: Duration = Duration.ofMillis(50),
 ) {
     private val logger = thisLogger()
     private val json = Json {
@@ -135,8 +138,21 @@ internal class IjMcpTargetRegistryStore(
             StandardOpenOption.CREATE,
             StandardOpenOption.WRITE,
         ).use { channel ->
-            channel.lock().use {
-                return action()
+            val deadline = Instant.now(clock).plus(lockTimeout)
+            while (true) {
+                try {
+                    channel.tryLock()?.use {
+                        return action()
+                    }
+                } catch (_: OverlappingFileLockException) {
+                    // Another thread in this JVM still holds the registry lock.
+                }
+
+                if (Instant.now(clock).isAfter(deadline)) {
+                    throw IjMcpTargetRegistryLockTimeoutException(lockFile, lockTimeout)
+                }
+
+                Thread.sleep(lockRetryDelay.toMillis().coerceAtLeast(1))
             }
         }
     }
@@ -149,6 +165,13 @@ internal class IjMcpTargetRegistryStore(
         private fun defaultRegistryRoot(): Path = Path.of(System.getProperty("user.home"), ".ij-mcp")
     }
 }
+
+internal class IjMcpTargetRegistryLockTimeoutException(
+    lockFile: Path,
+    timeout: Duration,
+) : IllegalStateException(
+    "Timed out after ${timeout.toMillis()}ms waiting for IJ-MCP registry lock at $lockFile.",
+)
 
 private fun IjMcpTargetStatus.toRegistration(now: Instant): IjMcpTargetRegistration = IjMcpTargetRegistration(
     targetId = descriptor.targetId,

@@ -37,11 +37,27 @@ class IjMcpRequestRouterTest {
 
         val response = router.handlePost(
             requestBody = """{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}""",
-            protocolVersionHeader = IjMcpProtocol.protocolVersion,
+            protocolVersionHeader = null,
         )
 
         assertEquals(202, response.statusCode)
         assertEquals(null, response.body)
+    }
+
+    @Test
+    fun toolsListAcceptsMissingProtocolHeader() {
+        val router = IjMcpRequestRouter()
+
+        val response = router.handlePost(
+            requestBody = """{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}""",
+            protocolVersionHeader = null,
+        )
+
+        val body = json.parseToJsonElement(requireNotNull(response.body)).jsonObject
+        val tools = body.getValue("result").jsonObject.getValue("tools").jsonArray
+
+        assertEquals(200, response.statusCode)
+        assertEquals(65, tools.size)
     }
 
     @Test
@@ -116,5 +132,18 @@ class IjMcpRequestRouterTest {
         assertEquals("-32601", error.getValue("code").jsonPrimitive.content)
         assertEquals("Method not found", error.getValue("message").jsonPrimitive.content)
         assertFalse(body.containsKey("result"))
+    }
+
+    @Test
+    fun mismatchedProtocolHeaderStillFails() {
+        val router = IjMcpRequestRouter()
+
+        val response = router.handlePost(
+            requestBody = """{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}""",
+            protocolVersionHeader = "2025-01-01",
+        )
+
+        assertEquals(400, response.statusCode)
+        assertEquals("Unsupported MCP-Protocol-Version header.", response.body)
     }
 }

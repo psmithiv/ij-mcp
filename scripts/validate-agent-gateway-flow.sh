@@ -30,7 +30,7 @@ open_payload="{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\"
 fail_if_error() {
     local label="$1"
     local body="$2"
-    if [[ "$body" == *'"error"'* ]]; then
+    if [[ "$body" == *'"error":'* ]] || [[ "$body" == *'"isError":true'* ]]; then
         echo "$label failed:" >&2
         echo "$body" >&2
         exit 1

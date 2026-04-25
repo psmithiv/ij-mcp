@@ -1,5 +1,6 @@
-import org.gradle.api.tasks.WriteProperties
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+
+import org.gradle.api.tasks.WriteProperties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {

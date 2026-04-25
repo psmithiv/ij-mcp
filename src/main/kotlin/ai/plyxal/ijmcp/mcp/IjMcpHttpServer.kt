@@ -1,5 +1,6 @@
 package ai.plyxal.ijmcp.mcp
 
+import ai.plyxal.ijmcp.app.IssuedPairingCode
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -19,6 +20,7 @@ internal class IjMcpHttpServer(
     private val security: IjMcpServerSecurity = IjMcpStaticTokenSecurity(IjMcpProtocol.defaultBearerToken),
     private val statusProvider: () -> IjMcpTargetStatus? = { null },
     private val onAuthenticationStateChanged: (() -> Unit)? = null,
+    private val internalPairingCodeIssuer: (() -> IssuedPairingCode?)? = null,
     private val executor: ExecutorService = Executors.newCachedThreadPool(),
 ) : AutoCloseable {
     private val json = Json { prettyPrint = false }
@@ -49,6 +51,9 @@ internal class IjMcpHttpServer(
         }
         httpServer.createContext(IjMcpProtocol.pairingPath) { exchange ->
             handlePairingExchange(exchange)
+        }
+        httpServer.createContext(IjMcpProtocol.internalPairingCodePath) { exchange ->
+            handleInternalPairingCodeExchange(exchange)
         }
         httpServer.executor = executor
         httpServer.start()
@@ -248,6 +253,91 @@ internal class IjMcpHttpServer(
                     )
                 }
             }
+        } finally {
+            exchange.close()
+        }
+    }
+
+    private fun handleInternalPairingCodeExchange(exchange: HttpExchange) {
+        try {
+            val pairingCodeIssuer = internalPairingCodeIssuer
+            if (pairingCodeIssuer == null) {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 404,
+                        body = "Not Found",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            if (!isAllowedOrigin(exchange.requestHeaders.getFirst("Origin"))) {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 403,
+                        body = "Forbidden",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            if (exchange.requestMethod != "POST") {
+                writeResponse(
+                    exchange,
+                    IjMcpHttpResponse(
+                        statusCode = 405,
+                        body = "Method Not Allowed",
+                        contentType = "text/plain; charset=utf-8",
+                    ),
+                )
+                return
+            }
+
+            val issuedCode = pairingCodeIssuer()
+                ?: run {
+                    writeResponse(
+                        exchange,
+                        IjMcpHttpResponse(
+                            statusCode = 409,
+                            body = json.encodeToString(
+                                JsonObject.serializer(),
+                                buildJsonObject {
+                                    put("status", "error")
+                                    put("errorCode", "pairing_not_available")
+                                    put("message", "No active target is available to issue a pairing code.")
+                                },
+                            ),
+                        ),
+                    )
+                    return
+                }
+
+            val status = statusProvider()
+            writeResponse(
+                exchange,
+                IjMcpHttpResponse(
+                    statusCode = 200,
+                    body = json.encodeToString(
+                        JsonObject.serializer(),
+                        buildJsonObject {
+                            put("status", "success")
+                            put("pairingCode", issuedCode.code)
+                            put("expiresAt", issuedCode.expiresAt.toString())
+                            put("protocolVersion", IjMcpProtocol.protocolVersion)
+                            put("requiresPairing", security.requiresPairing())
+                            status?.let {
+                                put("targetId", it.descriptor.targetId)
+                                put("endpointUrl", it.endpointUrl)
+                                put("projectName", it.descriptor.projectName)
+                            }
+                        },
+                    ),
+                ),
+            )
         } finally {
             exchange.close()
         }
