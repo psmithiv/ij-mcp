@@ -117,6 +117,9 @@ Call a navigation tool:
 
 ```bash
 ./gradlew :cli:run --args='mcp call open_file {"path":"README.md","line":1,"column":1}'
+./gradlew :cli:run --args='mcp call list_tool_windows {}'
+./gradlew :cli:run --args='mcp call activate_tool_window {"id":"Project"}'
+./gradlew :cli:run --args='mcp call return_to_editor {}'
 ```
 
 Call a search tool:
@@ -127,7 +130,7 @@ Call a search tool:
 
 Expected result:
 
-* `mcp tools-list` returns the 8 documented tools
+* `mcp tools-list` returns the 15 documented tools
 * `mcp call` returns JSON-RPC success payloads with `structuredContent`
 * the action occurs in the selected project window, not in another open IDE window
 
