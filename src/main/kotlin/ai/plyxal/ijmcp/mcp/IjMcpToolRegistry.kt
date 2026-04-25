@@ -48,7 +48,7 @@ internal object IjMcpToolCatalog {
     private val descriptorsByName: MutableMap<String, IjMcpToolDescriptor> = linkedMapOf()
 
     val descriptors: List<IjMcpToolDescriptor> by lazy {
-        listOf(
+        (listOf(
             toolDescriptor(
                 name = "open_file",
                 title = "Open File",
@@ -531,7 +531,7 @@ internal object IjMcpToolCatalog {
                 destructiveHint = false,
                 idempotentHint = true,
             ),
-        )
+        ) + navigationSurfaceDescriptors())
             .onEach { descriptor -> descriptorsByName[descriptor.name] = descriptor }
     }
 
@@ -641,6 +641,104 @@ internal object IjMcpToolCatalog {
         includeSchema = false,
     )
 
+    private fun navigationSurfaceDescriptors(): List<IjMcpToolDescriptor> = listOf(
+        navigationSurfaceDescriptor("list_project_view_roots", "List Project View Roots", "List root nodes for the project view.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_project_view_children", "List Project View Children", "List child nodes for a project-view path.", required = listOf("path"), readOnlyHint = true),
+        navigationSurfaceDescriptor("get_project_view_selection", "Get Project View Selection", "Return the current project-view selection when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("select_project_view_node", "Select Project View Node", "Select a project-view node by path.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("expand_project_view_node", "Expand Project View Node", "Expand or reveal a project-view node by path.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("collapse_project_view_node", "Collapse Project View Node", "Collapse a project-view node by path when supported.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("open_gradle_tool_window", "Open Gradle Tool Window", "Open the Gradle tool window when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("list_gradle_projects", "List Gradle Projects", "List Gradle project roots inferred from project files.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_gradle_tasks", "List Gradle Tasks", "List Gradle tasks declared in project build files.", readOnlyHint = true),
+        navigationSurfaceDescriptor("reveal_gradle_project", "Reveal Gradle Project", "Reveal a Gradle project path in the IDE.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("focus_gradle_task", "Focus Gradle Task", "Focus a Gradle task when the Gradle tool window is available.", required = listOf("taskPath"), readOnlyHint = false),
+        navigationSurfaceDescriptor("get_gradle_sync_status", "Get Gradle Sync Status", "Return Gradle sync availability for the active project.", readOnlyHint = true),
+        navigationSurfaceDescriptor("goto_file", "Go To File", "Open the best matching project file by path or query.", readOnlyHint = false),
+        navigationSurfaceDescriptor("goto_symbol", "Go To Symbol", "Open the best matching project symbol by query.", required = listOf("query"), readOnlyHint = false),
+        navigationSurfaceDescriptor("goto_declaration", "Go To Declaration", "Navigate to the declaration for the current editor context when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("goto_implementation", "Go To Implementation", "Navigate to implementations for the current editor context when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("find_usages", "Find Usages", "Find usages for the current editor context when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("get_structure_view", "Get Structure View", "Return a code-outline view for the active or targeted file.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_structure_nodes", "List Structure Nodes", "List code-outline nodes for the active or targeted file.", readOnlyHint = true),
+        navigationSurfaceDescriptor("focus_structure_node", "Focus Structure Node", "Focus a structure node by symbol name.", required = listOf("query"), readOnlyHint = false),
+        navigationSurfaceDescriptor("expand_structure_node", "Expand Structure Node", "Return children for a structure node by symbol name.", required = listOf("query"), readOnlyHint = true),
+        navigationSurfaceDescriptor("collapse_structure_node", "Collapse Structure Node", "Acknowledge a structure-node collapse request.", required = listOf("query"), readOnlyHint = false),
+        navigationSurfaceDescriptor("goto_structure_symbol", "Go To Structure Symbol", "Navigate to a symbol from the active file structure.", required = listOf("query"), readOnlyHint = false),
+        navigationSurfaceDescriptor("list_run_configurations", "List Run Configurations", "List configured run configurations for the active project.", readOnlyHint = true),
+        navigationSurfaceDescriptor("select_run_configuration", "Select Run Configuration", "Select a run configuration by name.", required = listOf("name"), readOnlyHint = false),
+        navigationSurfaceDescriptor("get_active_run_session", "Get Active Run Session", "Return active run-session content when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("open_run_tool_window", "Open Run Tool Window", "Open the Run tool window.", readOnlyHint = false),
+        navigationSurfaceDescriptor("open_debug_tool_window", "Open Debug Tool Window", "Open the Debug tool window.", readOnlyHint = false),
+        navigationSurfaceDescriptor("list_services", "List Services", "List service-view content when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("focus_service_node", "Focus Service Node", "Focus a service node when supported.", required = listOf("query"), readOnlyHint = false),
+        navigationSurfaceDescriptor("open_problems_tool_window", "Open Problems Tool Window", "Open the Problems tool window when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("list_problems", "List Problems", "List project problems when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("focus_problem", "Focus Problem", "Focus a problem by id when available.", required = listOf("id"), readOnlyHint = false),
+        navigationSurfaceDescriptor("list_file_diagnostics", "List File Diagnostics", "List diagnostics for a project file.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_inspection_results", "List Inspection Results", "List available inspection results when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("focus_diagnostic", "Focus Diagnostic", "Focus a file diagnostic by id or location.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("list_vcs_roots", "List VCS Roots", "List version-control roots for the active project.", readOnlyHint = true),
+        navigationSurfaceDescriptor("get_current_branch", "Get Current Branch", "Return the current branch for known VCS roots when available.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_changed_files", "List Changed Files", "List changed files from IntelliJ VCS state.", readOnlyHint = true),
+        navigationSurfaceDescriptor("focus_changed_file", "Focus Changed File", "Open a changed file by path.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("open_vcs_log", "Open VCS Log", "Open the VCS log tool window when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("open_commit_tool_window", "Open Commit Tool Window", "Open the Commit tool window when available.", readOnlyHint = false),
+        navigationSurfaceDescriptor("reveal_change_in_vcs", "Reveal Change In VCS", "Reveal a changed file in VCS context.", required = listOf("path"), readOnlyHint = false),
+        navigationSurfaceDescriptor("get_ide_context", "Get IDE Context", "Return active IDE project, editor, and tool-window context.", readOnlyHint = true),
+        navigationSurfaceDescriptor("get_ui_focus_context", "Get UI Focus Context", "Return a lightweight UI focus summary.", readOnlyHint = true),
+        navigationSurfaceDescriptor("list_open_projects", "List Open Projects", "List currently open IntelliJ projects.", readOnlyHint = true),
+        navigationSurfaceDescriptor("get_project_context", "Get Project Context", "Return project identity and path context.", readOnlyHint = true),
+        navigationSurfaceDescriptor("get_mcp_server_status", "Get MCP Server Status", "Return IJ-MCP target status for this project.", readOnlyHint = true),
+    )
+
+    private fun navigationSurfaceDescriptor(
+        name: String,
+        title: String,
+        description: String,
+        required: List<String> = emptyList(),
+        readOnlyHint: Boolean,
+    ): IjMcpToolDescriptor = toolDescriptor(
+        name = name,
+        title = title,
+        description = description,
+        inputSchema = navigationSurfaceInputSchema(required),
+        outputSchema = navigationSurfaceOutputSchema(),
+        readOnlyHint = readOnlyHint,
+        destructiveHint = false,
+        idempotentHint = true,
+    )
+
+    private fun navigationSurfaceInputSchema(required: List<String>): JsonObject = schemaObject(
+        required = required,
+        properties = linkedMapOf(
+            "path" to stringSchema(minLength = 1),
+            "id" to stringSchema(minLength = 1),
+            "query" to stringSchema(minLength = 1),
+            "name" to stringSchema(minLength = 1),
+            "taskPath" to stringSchema(minLength = 1),
+            "limit" to integerSchema(minimum = 1, maximum = 100, defaultValue = 20),
+        ),
+    )
+
+    private fun navigationSurfaceOutputSchema(): JsonObject = schemaObject(
+        required = listOf("status", "message", "projectName"),
+        properties = linkedMapOf(
+            "status" to enumStringSchema("success", "error"),
+            "message" to stringSchema(),
+            "errorCode" to stringSchema(),
+            "projectName" to stringSchema(),
+            "path" to stringSchema(),
+            "absolutePath" to stringSchema(),
+            "id" to stringSchema(),
+            "query" to stringSchema(),
+            "totalReturned" to integerSchema(minimum = 0),
+            "items" to arraySchema(flexibleObjectSchema()),
+            "results" to arraySchema(flexibleObjectSchema()),
+            "details" to flexibleObjectSchema(),
+        ),
+    )
+
     private fun stringSchema(
         minLength: Int? = null,
         description: String? = null,
@@ -668,6 +766,11 @@ internal object IjMcpToolCatalog {
 
     private fun booleanSchema(): JsonObject = buildJsonObject {
         put("type", "boolean")
+    }
+
+    private fun flexibleObjectSchema(): JsonObject = buildJsonObject {
+        put("type", "object")
+        put("additionalProperties", true)
     }
 
     private fun arraySchema(items: JsonObject): JsonObject = buildJsonObject {

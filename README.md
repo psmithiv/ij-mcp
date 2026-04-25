@@ -10,6 +10,7 @@ The current repository state includes:
 * pair-once authentication with target-scoped credentials
 * a local CLI for sticky target selection, pairing, and MCP request routing
 * IntelliJ-backed navigation tools for files, tabs, project reveal, and active editor context
+* IntelliJ-backed navigation surfaces for Project view, Gradle, go-to, structure, run/debug/services, diagnostics, VCS, and IDE context
 * IntelliJ-backed file and symbol search tools with project-scope enforcement
 * automated tests for transport behavior, registry updates, auth isolation, and project-scoped search/path verification
 <!-- Plugin description end -->
@@ -89,6 +90,7 @@ The v1 implementation currently covers:
 * `open_file`, `focus_tab`, `list_open_tabs`, `close_tab`, `reveal_file_in_project`, `get_active_editor_context`, `move_caret`, and `select_editor_range`
 * `list_tool_windows`, `activate_tool_window`, `hide_tool_window`, `get_active_tool_window`, `list_tool_window_content`, `focus_tool_window_content`, and `return_to_editor`
 * `search_files` and `search_symbols`
+* Project view, Gradle, go-to, structure, run/debug/services, diagnostics, VCS, and IDE context navigation tools
 * fail-closed behavior for missing auth, stale target selection, and outside-project file access
 
 ## CLI

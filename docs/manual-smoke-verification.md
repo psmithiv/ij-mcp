@@ -122,6 +122,9 @@ Call a navigation tool:
 ./gradlew :cli:run --args='mcp call list_tool_windows {}'
 ./gradlew :cli:run --args='mcp call activate_tool_window {"id":"Project"}'
 ./gradlew :cli:run --args='mcp call return_to_editor {}'
+./gradlew :cli:run --args='mcp call list_project_view_roots {}'
+./gradlew :cli:run --args='mcp call get_ide_context {}'
+./gradlew :cli:run --args='mcp call list_vcs_roots {}'
 ```
 
 Call a search tool:
@@ -132,7 +135,7 @@ Call a search tool:
 
 Expected result:
 
-* `mcp tools-list` returns the 17 documented tools
+* `mcp tools-list` returns the 65 documented tools
 * `mcp call` returns JSON-RPC success payloads with `structuredContent`
 * the action occurs in the selected project window, not in another open IDE window
 

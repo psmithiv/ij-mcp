@@ -1,6 +1,7 @@
 package ai.plyxal.ijmcp.app
 
 import ai.plyxal.ijmcp.ide.IjMcpNavigationToolHandlers
+import ai.plyxal.ijmcp.ide.IjMcpNavigationSurfaceToolHandlers
 import ai.plyxal.ijmcp.ide.IjMcpSearchToolHandlers
 import ai.plyxal.ijmcp.ide.IjMcpToolWindowToolHandlers
 import ai.plyxal.ijmcp.mcp.IjMcpHttpServer
@@ -45,7 +46,8 @@ class IjMcpProjectRuntimeService(
             IjMcpToolRegistry(
                 handlers = IjMcpNavigationToolHandlers(project).all() +
                     IjMcpToolWindowToolHandlers(project).all() +
-                    IjMcpSearchToolHandlers(project).all(),
+                    IjMcpSearchToolHandlers(project).all() +
+                    IjMcpNavigationSurfaceToolHandlers(project, statusProvider = ::currentStatus).all(),
             ),
         ),
         security = authManager,

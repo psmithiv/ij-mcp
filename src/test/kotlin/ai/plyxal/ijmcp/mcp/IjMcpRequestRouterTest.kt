@@ -58,7 +58,7 @@ class IjMcpRequestRouterTest {
         val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
 
         assertEquals(200, response.statusCode)
-        assertEquals(17, tools.size)
+        assertEquals(65, tools.size)
         assertEquals("open_file", tools.first().jsonObject.getValue("name").jsonPrimitive.content)
         assertTrue(toolNames.contains("move_caret"))
         assertTrue(toolNames.contains("select_editor_range"))
@@ -69,6 +69,15 @@ class IjMcpRequestRouterTest {
         assertTrue(toolNames.contains("list_tool_window_content"))
         assertTrue(toolNames.contains("focus_tool_window_content"))
         assertTrue(toolNames.contains("return_to_editor"))
+        assertTrue(toolNames.contains("list_project_view_roots"))
+        assertTrue(toolNames.contains("open_gradle_tool_window"))
+        assertTrue(toolNames.contains("goto_file"))
+        assertTrue(toolNames.contains("get_structure_view"))
+        assertTrue(toolNames.contains("list_run_configurations"))
+        assertTrue(toolNames.contains("open_problems_tool_window"))
+        assertTrue(toolNames.contains("list_vcs_roots"))
+        assertTrue(toolNames.contains("get_ide_context"))
+        assertTrue(toolNames.contains("get_mcp_server_status"))
     }
 
     @Test
