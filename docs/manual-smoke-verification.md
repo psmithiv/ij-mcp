@@ -119,6 +119,9 @@ Call a navigation tool:
 ./gradlew :cli:run --args='mcp call open_file {"path":"README.md","line":1,"column":1}'
 ./gradlew :cli:run --args='mcp call move_caret {"line":2,"column":1}'
 ./gradlew :cli:run --args='mcp call select_editor_range {"startLine":1,"startColumn":1,"endLine":1,"endColumn":5}'
+./gradlew :cli:run --args='mcp call list_tool_windows {}'
+./gradlew :cli:run --args='mcp call activate_tool_window {"id":"Project"}'
+./gradlew :cli:run --args='mcp call return_to_editor {}'
 ```
 
 Call a search tool:
@@ -129,7 +132,7 @@ Call a search tool:
 
 Expected result:
 
-* `mcp tools-list` returns the 10 documented tools
+* `mcp tools-list` returns the 17 documented tools
 * `mcp call` returns JSON-RPC success payloads with `structuredContent`
 * the action occurs in the selected project window, not in another open IDE window
 

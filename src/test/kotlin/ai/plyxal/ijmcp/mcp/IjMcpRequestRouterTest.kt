@@ -58,10 +58,17 @@ class IjMcpRequestRouterTest {
         val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
 
         assertEquals(200, response.statusCode)
-        assertEquals(10, tools.size)
+        assertEquals(17, tools.size)
         assertEquals("open_file", tools.first().jsonObject.getValue("name").jsonPrimitive.content)
         assertTrue(toolNames.contains("move_caret"))
         assertTrue(toolNames.contains("select_editor_range"))
+        assertTrue(toolNames.contains("list_tool_windows"))
+        assertTrue(toolNames.contains("activate_tool_window"))
+        assertTrue(toolNames.contains("hide_tool_window"))
+        assertTrue(toolNames.contains("get_active_tool_window"))
+        assertTrue(toolNames.contains("list_tool_window_content"))
+        assertTrue(toolNames.contains("focus_tool_window_content"))
+        assertTrue(toolNames.contains("return_to_editor"))
     }
 
     @Test

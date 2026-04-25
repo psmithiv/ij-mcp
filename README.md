@@ -87,6 +87,7 @@ The v1 implementation currently covers:
 * pair-once authentication with per-target bearer tokens
 * MCP lifecycle and `tools/list` / `tools/call`
 * `open_file`, `focus_tab`, `list_open_tabs`, `close_tab`, `reveal_file_in_project`, `get_active_editor_context`, `move_caret`, and `select_editor_range`
+* `list_tool_windows`, `activate_tool_window`, `hide_tool_window`, `get_active_tool_window`, `list_tool_window_content`, `focus_tool_window_content`, and `return_to_editor`
 * `search_files` and `search_symbols`
 * fail-closed behavior for missing auth, stale target selection, and outside-project file access
 

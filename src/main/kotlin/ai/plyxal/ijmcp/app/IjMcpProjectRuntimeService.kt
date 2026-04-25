@@ -2,6 +2,7 @@ package ai.plyxal.ijmcp.app
 
 import ai.plyxal.ijmcp.ide.IjMcpNavigationToolHandlers
 import ai.plyxal.ijmcp.ide.IjMcpSearchToolHandlers
+import ai.plyxal.ijmcp.ide.IjMcpToolWindowToolHandlers
 import ai.plyxal.ijmcp.mcp.IjMcpHttpServer
 import ai.plyxal.ijmcp.mcp.IjMcpProtocol
 import ai.plyxal.ijmcp.mcp.IjMcpRequestRouter
@@ -42,7 +43,9 @@ class IjMcpProjectRuntimeService(
     private val server = IjMcpHttpServer(
         IjMcpRequestRouter(
             IjMcpToolRegistry(
-                handlers = IjMcpNavigationToolHandlers(project).all() + IjMcpSearchToolHandlers(project).all(),
+                handlers = IjMcpNavigationToolHandlers(project).all() +
+                    IjMcpToolWindowToolHandlers(project).all() +
+                    IjMcpSearchToolHandlers(project).all(),
             ),
         ),
         security = authManager,

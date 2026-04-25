@@ -331,6 +331,129 @@ internal object IjMcpToolCatalog {
                 idempotentHint = true,
             ),
             toolDescriptor(
+                name = "list_tool_windows",
+                title = "List Tool Windows",
+                description = "List IntelliJ tool windows registered for the active project.",
+                inputSchema = schemaObject(
+                    required = emptyList(),
+                    properties = linkedMapOf(),
+                ),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName", "toolWindows"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                        "toolWindows" to arraySchema(toolWindowSchema()),
+                    ),
+                ),
+                readOnlyHint = true,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "activate_tool_window",
+                title = "Activate Tool Window",
+                description = "Activate an available IntelliJ tool window by id.",
+                inputSchema = toolWindowIdInputSchema(),
+                outputSchema = toolWindowOutputSchema(),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "hide_tool_window",
+                title = "Hide Tool Window",
+                description = "Hide an IntelliJ tool window by id.",
+                inputSchema = toolWindowIdInputSchema(),
+                outputSchema = toolWindowOutputSchema(),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "get_active_tool_window",
+                title = "Get Active Tool Window",
+                description = "Return the currently active IntelliJ tool window for the active project.",
+                inputSchema = schemaObject(
+                    required = emptyList(),
+                    properties = linkedMapOf(),
+                ),
+                outputSchema = toolWindowOutputSchema(),
+                readOnlyHint = true,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "list_tool_window_content",
+                title = "List Tool Window Content",
+                description = "List content tabs within an IntelliJ tool window.",
+                inputSchema = toolWindowIdInputSchema(),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName", "id", "contents"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                        "id" to stringSchema(),
+                        "contents" to arraySchema(toolWindowContentSchema()),
+                    ),
+                ),
+                readOnlyHint = true,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "focus_tool_window_content",
+                title = "Focus Tool Window Content",
+                description = "Focus a content tab within an IntelliJ tool window by content name or zero-based index.",
+                inputSchema = schemaObject(
+                    required = listOf("id"),
+                    properties = linkedMapOf(
+                        "id" to stringSchema(minLength = 1),
+                        "contentName" to stringSchema(minLength = 1),
+                        "contentIndex" to integerSchema(minimum = 0),
+                    ),
+                ),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName", "id", "content"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                        "id" to stringSchema(),
+                        "content" to toolWindowContentSchema(),
+                    ),
+                ),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
+                name = "return_to_editor",
+                title = "Return To Editor",
+                description = "Return focus from the active tool window to the editor component.",
+                inputSchema = schemaObject(
+                    required = emptyList(),
+                    properties = linkedMapOf(),
+                ),
+                outputSchema = schemaObject(
+                    required = listOf("status", "message", "projectName"),
+                    properties = linkedMapOf(
+                        "status" to enumStringSchema("success", "error"),
+                        "message" to stringSchema(),
+                        "errorCode" to stringSchema(),
+                        "projectName" to stringSchema(),
+                    ),
+                ),
+                readOnlyHint = false,
+                destructiveHint = false,
+                idempotentHint = true,
+            ),
+            toolDescriptor(
                 name = "search_files",
                 title = "Search Files",
                 description = "Search project files by name using IntelliJ-aware indexing.",
@@ -468,6 +591,54 @@ internal object IjMcpToolCatalog {
         required = required,
         properties = properties,
         includeSchema = includeSchema,
+    )
+
+    private fun toolWindowIdInputSchema(): JsonObject = schemaObject(
+        required = listOf("id"),
+        properties = linkedMapOf(
+            "id" to stringSchema(minLength = 1),
+        ),
+    )
+
+    private fun toolWindowOutputSchema(): JsonObject = schemaObject(
+        required = listOf("status", "message", "projectName", "id", "title"),
+        properties = linkedMapOf(
+            "status" to enumStringSchema("success", "error"),
+            "message" to stringSchema(),
+            "errorCode" to stringSchema(),
+            "projectName" to stringSchema(),
+            "id" to stringSchema(),
+            "title" to stringSchema(),
+            "isAvailable" to booleanSchema(),
+            "isVisible" to booleanSchema(),
+            "isActive" to booleanSchema(),
+            "contentCount" to integerSchema(minimum = 0),
+            "selectedContentName" to stringSchema(),
+        ),
+    )
+
+    private fun toolWindowSchema(): JsonObject = objectSchema(
+        required = listOf("id", "title", "isAvailable", "isVisible", "isActive", "contentCount"),
+        properties = linkedMapOf(
+            "id" to stringSchema(),
+            "title" to stringSchema(),
+            "isAvailable" to booleanSchema(),
+            "isVisible" to booleanSchema(),
+            "isActive" to booleanSchema(),
+            "contentCount" to integerSchema(minimum = 0),
+            "selectedContentName" to stringSchema(),
+        ),
+        includeSchema = false,
+    )
+
+    private fun toolWindowContentSchema(): JsonObject = objectSchema(
+        required = listOf("index", "displayName", "isSelected"),
+        properties = linkedMapOf(
+            "index" to integerSchema(minimum = 0),
+            "displayName" to stringSchema(),
+            "isSelected" to booleanSchema(),
+        ),
+        includeSchema = false,
     )
 
     private fun stringSchema(
