@@ -161,6 +161,22 @@ fail_if_error() {
     fi
 }
 
+LAST_CURL_BODY=""
+LAST_CURL_MS=""
+
+curl_capture() {
+    local label="$1"
+    local body_file="$WORK_ROOT/curl.$RANDOM.body"
+    local elapsed_seconds
+    shift
+
+    elapsed_seconds="$(curl -fsS -o "$body_file" -w '%{time_total}' "$@")"
+    LAST_CURL_BODY="$(cat "$body_file")"
+    LAST_CURL_MS="$(awk -v seconds="$elapsed_seconds" 'BEGIN { printf "%.0f", seconds * 1000 }')"
+    fail_if_error "$label" "$LAST_CURL_BODY"
+    echo "$label latency: ${LAST_CURL_MS} ms"
+}
+
 extract_codex_endpoint() {
     awk '
         /^\[mcp_servers\.ij-mcp\]/ { inside=1; next }
@@ -198,10 +214,12 @@ validate_direct_mcp_flow() {
     local initialize_payload
     local tools_payload
     local open_payload
+    local open_again_payload
     local health_response
     local initialize_response
     local tools_response
     local open_response
+    local open_again_response
 
     endpoint_url="$(extract_codex_endpoint)"
     bearer_token="$(extract_codex_token)"
@@ -218,44 +236,60 @@ validate_direct_mcp_flow() {
     initialize_payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ij-mcp-installed-validator","version":"1.0.0"}}}'
     tools_payload='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
     open_payload="{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"open_file\",\"arguments\":{\"path\":\"$escaped_path\",\"line\":1,\"column\":1}}}"
+    open_again_payload="{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"open_file\",\"arguments\":{\"path\":\"$escaped_path\",\"line\":1,\"column\":1}}}"
 
     echo
     echo "Checking direct project MCP endpoint from managed Codex config..."
-    health_response="$(curl -fsS "$health_url")"
-    fail_if_error "health" "$health_response"
+    curl_capture "health" "$health_url"
+    health_response="$LAST_CURL_BODY"
     echo "$health_response"
 
     echo
     echo "Initializing direct MCP session..."
-    initialize_response="$(curl -fsS \
+    curl_capture "initialize" \
         -H "$auth_header" \
         -H 'Content-Type: application/json' \
         -d "$initialize_payload" \
-        "$endpoint_url")"
-    fail_if_error "initialize" "$initialize_response"
+        "$endpoint_url"
+    initialize_response="$LAST_CURL_BODY"
     echo "$initialize_response"
 
     echo
     echo "Listing tools through the direct endpoint..."
-    tools_response="$(curl -fsS \
+    curl_capture "tools/list" \
         -H "$auth_header" \
         -H "$protocol_header" \
         -H 'Content-Type: application/json' \
         -d "$tools_payload" \
-        "$endpoint_url")"
-    fail_if_error "tools/list" "$tools_response"
-    echo "$tools_response"
+        "$endpoint_url"
+    tools_response="$LAST_CURL_BODY"
+    if [[ "$tools_response" != *'"name":"open_file"'* ]]; then
+        echo "tools/list did not include open_file." >&2
+        exit 1
+    fi
+    echo "tools/list returned open_file."
 
     echo
     echo "Opening the validation file through the direct endpoint..."
-    open_response="$(curl -fsS \
+    curl_capture "open_file" \
         -H "$auth_header" \
         -H "$protocol_header" \
         -H 'Content-Type: application/json' \
         -d "$open_payload" \
-        "$endpoint_url")"
-    fail_if_error "open_file" "$open_response"
+        "$endpoint_url"
+    open_response="$LAST_CURL_BODY"
     echo "$open_response"
+
+    echo
+    echo "Opening the validation file again through the direct endpoint..."
+    curl_capture "open_file_again" \
+        -H "$auth_header" \
+        -H "$protocol_header" \
+        -H 'Content-Type: application/json' \
+        -d "$open_again_payload" \
+        "$endpoint_url"
+    open_again_response="$LAST_CURL_BODY"
+    echo "$open_again_response"
 }
 
 echo "Launching installed IntelliJ IDEA with isolated state..."
