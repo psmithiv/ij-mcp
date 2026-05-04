@@ -247,6 +247,50 @@ class IjMcpGatewayPreflightTest {
                     assertContains(response.body(), "\"tools\"")
                 }
 
+                assertEquals(listOf("health", "initialize", "tools/list", "tools/list"), observedRequests.toList())
+            }
+        }
+    }
+
+    @Test
+    fun gatewayRechecksHealthAfterRouteCacheExpires() {
+        val directory = Files.createTempDirectory("ijmcp-cli-gateway-cache-expiry")
+        val observedRequests = mutableListOf<String>()
+        var now = 1_000L
+
+        withFakeTargetServer(observedRequests) { targetPort ->
+            withGatewayServer(
+                directory = directory,
+                targetPort = targetPort,
+                credentialsByTargetId = mapOf("target-a" to "target-token"),
+                preflightFactory = { resolver ->
+                    IjMcpGatewayPreflight(
+                        selectedTargetResolver = resolver,
+                        routeCacheTtlMillis = 500,
+                        currentTimeMillis = { now },
+                    )
+                },
+            ) { gatewayPort ->
+                repeat(2) {
+                    val response = client.send(
+                        HttpRequest.newBuilder(URI.create("http://127.0.0.1:$gatewayPort/mcp"))
+                            .header("Authorization", "Bearer gateway-token")
+                            .header("Content-Type", "application/json")
+                            .header("MCP-Protocol-Version", IJ_MCP_PROTOCOL_VERSION)
+                            .POST(
+                                HttpRequest.BodyPublishers.ofString(
+                                    """{"jsonrpc":"2.0","id":${it + 3},"method":"tools/list","params":{}}""",
+                                ),
+                            )
+                            .build(),
+                        HttpResponse.BodyHandlers.ofString(),
+                    )
+
+                    assertEquals(200, response.statusCode())
+                    assertContains(response.body(), "\"tools\"")
+                    now += 600
+                }
+
                 assertEquals(listOf("health", "initialize", "tools/list", "health", "tools/list"), observedRequests.toList())
             }
         }
@@ -256,6 +300,9 @@ class IjMcpGatewayPreflightTest {
         directory: java.nio.file.Path,
         targetPort: Int,
         credentialsByTargetId: Map<String, String>,
+        preflightFactory: (IjMcpSelectedTargetResolver) -> IjMcpGatewayPreflight = { resolver ->
+            IjMcpGatewayPreflight(resolver)
+        },
         block: (gatewayPort: Int) -> Unit,
     ) {
         val stateStore = IjMcpCliStateStore(directory.resolve("client-state.json"))
@@ -299,7 +346,7 @@ class IjMcpGatewayPreflightTest {
 
         val server = IjMcpCliGatewayServer(
             config = IjMcpGatewayConfig(port = 0, bearerToken = "gateway-token"),
-            preflight = IjMcpGatewayPreflight(resolver),
+            preflight = preflightFactory(resolver),
             routeSummaryProvider = { resolver.describeStickyRoute() },
         )
 

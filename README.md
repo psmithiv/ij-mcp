@@ -66,6 +66,10 @@ The shortest end-to-end local setup flow is:
 5. Verify direct access with `./gradlew :cli:run --args='mcp tools-list'`.
 6. If you want agent access, print the stable endpoint with `./gradlew :cli:run --args='gateway config'` and start it with `./gradlew :cli:run --args='gateway serve'`.
 
+For repeated coding-agent actions, prefer the gateway endpoint over one-off
+`./gradlew :cli:run --args='mcp call ...'` commands. Keeping `gateway serve`
+running avoids Gradle and JVM startup on every IDE command.
+
 ## Compatibility
 
 The current rollout policy is intentionally narrow:

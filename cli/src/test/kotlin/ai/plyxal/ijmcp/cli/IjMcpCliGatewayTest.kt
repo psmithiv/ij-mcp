@@ -147,7 +147,7 @@ class IjMcpCliGatewayTest {
             }
         }
 
-        assertEquals(listOf("health", "initialize", "health", "tools/list"), observedMethods.toList())
+        assertEquals(listOf("health", "initialize", "tools/list"), observedMethods.toList())
     }
 
     private fun withFakeTargetServer(

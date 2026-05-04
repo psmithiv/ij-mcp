@@ -107,6 +107,10 @@ internal class IjMcpSelectedTargetResolver(
         )
     }
 
+    fun selectedTargetId(): Result<String?> = runCatching {
+        stateStore.load().selectedTargetId?.takeIf { it.isNotBlank() }
+    }
+
     fun resolveSelectedConnectedTarget(): Result<IjMcpResolvedTarget> = runCatching {
         val target = resolveSelectedHealthyTarget().getOrElse { exception ->
             throw exception

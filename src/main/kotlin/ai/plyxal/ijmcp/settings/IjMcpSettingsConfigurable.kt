@@ -77,6 +77,19 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val generatePairingCodeButton = JButton("Generate Pairing Code")
     private val copyPairingCodeButton = JButton("Copy Pairing Code")
     private val resetPairingButton = JButton("Reset CLI Access")
+    private val gatewayReadinessArea = JTextArea(2, 80).apply {
+        isEditable = false
+        lineWrap = true
+        wrapStyleWord = true
+    }
+    private val gatewayEndpointField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
+    private val gatewayHealthField = JTextField().apply {
+        isEditable = false
+        columns = 48
+    }
     private val agentSetupArea = JTextArea(3, 80).apply {
         isEditable = false
         lineWrap = true
@@ -233,6 +246,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                         .addLabeledComponent("Pairing Code", pairingCodeField)
                         .addLabeledComponent("Code Expiry", pairingCodeExpiryLabel)
                         .addLabeledComponent("Reset Impact", resetImpactLabel)
+                        .addLabeledComponent("Gateway Readiness", JBScrollPane(gatewayReadinessArea))
+                        .addLabeledComponent("Gateway Endpoint", gatewayEndpointField)
+                        .addLabeledComponent("Gateway Health", gatewayHealthField)
                         .addLabeledComponent("Agent Setup", JBScrollPane(agentSetupArea))
                         .addLabeledComponent("Gateway Token Export", gatewayTokenExportField)
                         .addLabeledComponent("Codex CLI Command", codexCommandField)
@@ -493,6 +509,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         lastErrorField.text = "Refreshing last error..."
         operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
         pairingWorkflowLabel.text = "Pairing workflow: refreshing target state..."
+        gatewayReadinessArea.text = "Checking gateway readiness..."
+        gatewayEndpointField.text = ""
+        gatewayHealthField.text = ""
         agentSetupArea.text = "Preparing the exact coding-agent configuration..."
         diagnosticsArea.text = "Refreshing target state..."
         generatePairingCodeButton.isEnabled = false
@@ -531,12 +550,16 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 gatewayConfig = agentGatewayStateStore.ensureGatewayConfig(),
                 targetStatus = status,
                 pairingCode = activePairingCode,
+                gatewaySelection = agentGatewayStateStore.selection(),
             )
         }.getOrElse { exception ->
             renderAgentSetupFailure("Unable to build the coding-agent configuration. ${exception.message ?: "Retry after refreshing targets."}")
             return
         }
 
+        gatewayReadinessArea.text = setupSummary.readiness
+        gatewayEndpointField.text = setupSummary.gatewayEndpointUrl
+        gatewayHealthField.text = setupSummary.gatewayHealthUrl
         agentSetupArea.text = setupSummary.guidance
         gatewayTokenExportField.text = setupSummary.gatewayTokenExportCommand
         codexCommandField.text = setupSummary.codexCommand
@@ -547,6 +570,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     }
 
     private fun renderAgentSetupFailure(message: String) {
+        gatewayReadinessArea.text = message
+        gatewayEndpointField.text = ""
+        gatewayHealthField.text = ""
         agentSetupArea.text = message
         gatewayTokenExportField.text = ""
         codexCommandField.text = ""
