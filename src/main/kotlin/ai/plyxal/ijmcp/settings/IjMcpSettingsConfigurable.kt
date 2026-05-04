@@ -38,8 +38,11 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     private val dateFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneId.systemDefault())
     private val pairingMessaging = IjMcpPairingMessaging(dateFormatter)
 
-    private val enabledCheckBox = JCheckBox("Enable local MCP server")
+    private val enabledCheckBox = JCheckBox("Enable IJ-MCP for this IDE")
+    private val autoTrustCheckBox = JCheckBox("Connect local Codex automatically")
+    private val manageCodexConfigCheckBox = JCheckBox("Manage Codex MCP config")
     private val portSpinner = JSpinner(SpinnerNumberModel(8765, 0, 65535, 1))
+    private val connectionStatusLabel = JBLabel("Connection: checking...")
     private val serverStatusLabel = JBLabel("Server status: stopped")
     private val pluginBuildLabel = JBLabel("Plugin build: unknown")
     private val compatibilityLabel = JBLabel("Compatibility: unknown")
@@ -248,6 +251,9 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
                 add(
                     FormBuilder.createFormBuilder()
                         .addComponent(enabledCheckBox)
+                        .addComponent(autoTrustCheckBox)
+                        .addComponent(manageCodexConfigCheckBox)
+                        .addLabeledComponent("Connection", connectionStatusLabel)
                         .addLabeledComponent("Preferred Port", portSpinner)
                         .addLabeledComponent("Server Status", serverStatusLabel)
                         .addLabeledComponent("Plugin Build", pluginBuildLabel)
@@ -267,16 +273,21 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     override fun isModified(): Boolean {
         val state = settingsService.snapshot()
         return enabledCheckBox.isSelected != state.enabled ||
-            (portSpinner.value as Number).toInt() != state.port
+            (portSpinner.value as Number).toInt() != state.port ||
+            autoTrustCheckBox.isSelected != state.autoTrustLocalClients ||
+            manageCodexConfigCheckBox.isSelected != state.manageCodexConfig
     }
 
     override fun apply() {
         settingsService.update(
             enabled = enabledCheckBox.isSelected,
             port = (portSpinner.value as Number).toInt(),
+            autoTrustLocalClients = autoTrustCheckBox.isSelected,
+            manageCodexConfig = manageCodexConfigCheckBox.isSelected,
         )
 
         serverStatusLabel.text = "Applying settings..."
+        connectionStatusLabel.text = "Connection: applying..."
 
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = runCatching { appService.applyConfiguredState() }
@@ -295,6 +306,8 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         val state = settingsService.snapshot()
         enabledCheckBox.isSelected = state.enabled
         portSpinner.value = state.port
+        autoTrustCheckBox.isSelected = state.autoTrustLocalClients
+        manageCodexConfigCheckBox.isSelected = state.manageCodexConfig
         renderCompatibility()
         renderStatus(appService.status())
         activePairingCode = null
@@ -392,6 +405,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
 
         if (status == null) {
             selectedTargetId = null
+            connectionStatusLabel.text = "Connection: open this project in IntelliJ and launch Codex from the project terminal."
             targetIdentityLabel.text = "Target: none detected"
             targetProjectLabel.text = "Project: open a project window to register a target"
             endpointStatusLabel.text = "Endpoint: not running"
@@ -401,7 +415,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             registryEntryField.text = "No live registry entry is published because no target is selected."
             runtimeIdentityField.text = "Open a normal project window to populate target runtime details."
             lastErrorField.text = "No target is currently selected."
-            operatorGuidanceLabel.text = "Operator guidance: open a normal project window, then enable IJ-MCP."
+            operatorGuidanceLabel.text = "Operator guidance: open a normal project window; IJ-MCP connects Codex automatically."
             diagnosticsArea.text = buildNoTargetDiagnostics()
             pairingCodeTargetId = null
             activePairingCode = null
@@ -418,6 +432,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
 
         selectedTargetId = status.descriptor.targetId
         val registration = cachedRegistrationsByTargetId[status.descriptor.targetId]
+        connectionStatusLabel.text = buildConnectionStatus(status)
 
         if (pairingCodeTargetId != status.descriptor.targetId) {
             activePairingCode = null
@@ -492,6 +507,7 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
         runtimeIdentityField.text = "Refreshing runtime identity..."
         lastErrorField.text = "Refreshing last error..."
         operatorGuidanceLabel.text = "Operator guidance: refreshing target state..."
+        connectionStatusLabel.text = "Connection: checking..."
         pairingWorkflowLabel.text = "Pairing workflow: refreshing target state..."
         agentSetupArea.text = "Preparing the exact coding-agent configuration..."
         diagnosticsArea.text = "Refreshing target state..."
@@ -526,11 +542,14 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
     }
 
     private fun renderAgentSetup(status: IjMcpTargetStatus?) {
+        val settings = settingsService.snapshot()
         val setupSummary = runCatching {
             IjMcpAgentSetupSummaryBuilder.build(
                 gatewayConfig = agentGatewayStateStore.ensureGatewayConfig(),
                 targetStatus = status,
                 pairingCode = activePairingCode,
+                autoTrustLocalClients = settings.autoTrustLocalClients,
+                manageCodexConfig = settings.manageCodexConfig,
             )
         }.getOrElse { exception ->
             renderAgentSetupFailure("Unable to build the coding-agent configuration. ${exception.message ?: "Retry after refreshing targets."}")
@@ -600,11 +619,11 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
 
         return when {
             detail == "No open IntelliJ project window is available." ->
-                "Operator guidance: open a normal project window, search Settings for IJ-MCP, and click Apply."
+                "Operator guidance: open a normal project window, then launch Codex from that project terminal."
             detail != null ->
                 "Operator guidance: resolve the startup issue shown in Diagnostics, then click Apply again."
             else ->
-                "Operator guidance: enable IJ-MCP and click Apply to start the local MCP server."
+                "Operator guidance: IJ-MCP is automatic by default. Click Apply only after changing connection settings."
         }.let { message ->
             if (status.running || configuredPort == status.port || configuredPort == 0) {
                 message
@@ -625,9 +644,28 @@ class IjMcpSettingsConfigurable : SearchableConfigurable {
             configuredPort != 0 && status.port != configuredPort ->
                 "Operator guidance: preferred port $configuredPort was unavailable; this target is running on ${status.port}. Re-discover or re-pair clients that expected the preferred port."
             status.requiresPairing ->
-                "Operator guidance: the target is live. Generate a pairing code to authorize the companion CLI or coding agent."
+                "Operator guidance: the target is live. Enable automatic local Codex trust, or use advanced pairing."
             else ->
-                "Operator guidance: the target is live and paired."
+                "Operator guidance: the target is live and Codex-ready."
+        }
+    }
+
+    private fun buildConnectionStatus(status: IjMcpTargetStatus): String {
+        val settings = settingsService.snapshot()
+
+        return when {
+            !settings.enabled ->
+                "Connection: disabled. Enable IJ-MCP to connect Codex to IntelliJ."
+            !status.running ->
+                "Connection: not ready. Reopen this project or click Apply."
+            settings.autoTrustLocalClients && settings.manageCodexConfig && !status.requiresPairing ->
+                "Connection: ready. Launch Codex from this project terminal and ask it to open a file."
+            settings.autoTrustLocalClients && !status.requiresPairing ->
+                "Connection: target trusted. Add or repair the Codex MCP entry to use it."
+            status.requiresPairing ->
+                "Connection: approval needed. Enable automatic local Codex trust or use advanced pairing."
+            else ->
+                "Connection: target is running."
         }
     }
 

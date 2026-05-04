@@ -78,6 +78,25 @@ class IjMcpTargetAuthManagerTest {
     }
 
     @Test
+    fun ensureTrustedTokenCreatesReusableLocalToken() {
+        val store = InMemoryTargetCredentialStore()
+        val authManager = IjMcpTargetAuthManager(
+            targetId = "target-a",
+            credentialStore = store,
+            tokenFactory = { "trusted-token" },
+        )
+
+        val trustedToken = authManager.ensureTrustedToken()
+        val trustedTokenAgain = authManager.ensureTrustedToken()
+
+        assertEquals("trusted-token", trustedToken)
+        assertEquals("trusted-token", trustedTokenAgain)
+        assertEquals("trusted-token", store.loadTargetToken("target-a"))
+        assertFalse(authManager.requiresPairing())
+        assertTrue(authManager.isAuthorized("Bearer trusted-token"))
+    }
+
+    @Test
     fun targetScopedTokensAreIsolatedAcrossTargets() {
         val store = InMemoryTargetCredentialStore()
         val targetA = IjMcpTargetAuthManager(

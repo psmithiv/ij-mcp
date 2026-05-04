@@ -31,6 +31,12 @@ internal class IjMcpTargetAuthManager(
         }
     }
 
+    fun ensureTrustedToken(): String = synchronized(lock) {
+        credentialStore.loadTargetToken(targetId)
+            ?.takeIf { it.isNotBlank() }
+            ?: tokenFactory().also { credentialStore.storeTargetToken(targetId, it) }
+    }
+
     fun issuePairingCode(): IssuedPairingCode = synchronized(lock) {
         val code = pairingCodeFactory()
         val expiresAt = Instant.now(clock).plus(codeTtl)

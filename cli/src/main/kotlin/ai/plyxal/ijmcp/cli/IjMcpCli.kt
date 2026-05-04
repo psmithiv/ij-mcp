@@ -61,7 +61,7 @@ internal class IjMcpCli(
                 val targets = registryReader.readTargets()
                 if (targets.isEmpty()) {
                     stdout.println("No IJ-MCP targets are currently registered.")
-                    stdout.println("Next: open IntelliJ IDEA, enable IJ-MCP in Settings, click Apply, then run `targets list` again.")
+                    stdout.println("Next: open the project in IntelliJ IDEA, then run `targets list` again.")
                 } else {
                     targets.forEach { target ->
                         val selectionMarker = if (state.selectedTargetId == target.targetId) "*" else " "
@@ -373,11 +373,9 @@ internal class IjMcpCli(
         stream.println("  ij-mcp-cli gateway <config|serve> ...")
         stream.println("")
         stream.println("Happy path:")
-        stream.println("  1. targets list")
-        stream.println("  2. targets select <targetId>")
-        stream.println("  3. targets current")
-        stream.println("  4. targets pair --code <pairingCode>")
-        stream.println("  5. mcp tools-list or gateway serve")
+        stream.println("  1. Install the plugin and open the project in IntelliJ IDEA.")
+        stream.println("  2. Launch codex from the project terminal.")
+        stream.println("  3. Use these commands only for advanced diagnostics.")
     }
 
     private fun printTargetsUsage(stream: PrintStream) {
