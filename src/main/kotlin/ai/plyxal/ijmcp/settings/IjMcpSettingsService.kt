@@ -24,10 +24,14 @@ class IjMcpSettingsService : PersistentStateComponent<IjMcpSettingsState> {
     internal fun update(
         enabled: Boolean,
         port: Int,
+        autoTrustLocalClients: Boolean,
+        manageCodexConfig: Boolean,
     ) {
         state = state.copy(
             enabled = enabled,
             port = port,
+            autoTrustLocalClients = autoTrustLocalClients,
+            manageCodexConfig = manageCodexConfig,
         )
     }
 }

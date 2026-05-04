@@ -1,8 +1,7 @@
 # Install IJ-MCP From Disk
 
 This guide covers the operator flow for installing the built `IJ-MCP` plugin
-into a normal IntelliJ IDEA instance and enabling the local MCP target for a
-project window.
+into a normal IntelliJ IDEA instance and connecting Codex to a project window.
 
 ## Prerequisites
 
@@ -36,28 +35,26 @@ build/distributions/ij-mcp-<version>.zip
 The plugin is installed at the IDE level, but the MCP target only becomes
 useful inside a real project window.
 
-## Enable IJ-MCP In A Project Window
+## Open A Project Window
 
 1. Open the target project in IntelliJ IDEA.
-2. Open `Settings` / `Preferences`.
-3. Search for `IJ-MCP`.
-4. Open the `IJ-MCP` settings page.
-5. Check `Enable local MCP server`.
-6. Leave `Preferred Port` at `8765` unless you are intentionally overriding it.
-7. Click `Apply`.
+2. Launch `codex` from that project directory.
+3. Open `Settings` / `Preferences` and search for `IJ-MCP` only if you want to
+   inspect connection state or disable automatic setup.
 
 ## Expected Success Signals
 
-After `Apply`, the `IJ-MCP` settings page should show:
+The `IJ-MCP` settings page should show:
 
 * `Server Status` as `Running at http://127.0.0.1:<port>/mcp`
+* `Connection` as ready for Codex from this project terminal
 * `Plugin Build` with the installed plugin version
 * `Compatibility` with the current IDE build and supported range
 * `Operator Guidance` with the next recommended action for the current state
 * `Target Identity` populated with a `targetId`
 * `Project` populated with the project name and base path
 * `Endpoint` populated with the active loopback URL
-* `Pairing Status` as `pairing required` until a CLI pairs successfully
+* `Pairing Status` as `paired` when automatic local trust is enabled
 * `Registry Status` as `registered at ...`
 
 The `Diagnostics` area should also show the current target metadata, endpoint,

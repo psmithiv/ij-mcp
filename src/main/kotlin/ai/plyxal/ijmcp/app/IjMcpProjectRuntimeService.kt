@@ -13,6 +13,8 @@ import ai.plyxal.ijmcp.model.IjMcpTargetDescriptor
 import ai.plyxal.ijmcp.model.IjMcpTargetStatus
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
+import ai.plyxal.ijmcp.settings.IjMcpAgentGatewayStateStore
+import ai.plyxal.ijmcp.settings.IjMcpCodexConfigManager
 import ai.plyxal.ijmcp.settings.IjMcpSecretStore
 import ai.plyxal.ijmcp.settings.IjMcpSettingsService
 import com.intellij.openapi.Disposable
@@ -36,6 +38,8 @@ class IjMcpProjectRuntimeService(
     private val appService = service<IjMcpAppService>()
     private val settingsService = service<IjMcpSettingsService>()
     private val secretStore = service<IjMcpSecretStore>()
+    private val agentGatewayStateStore = IjMcpAgentGatewayStateStore()
+    private val codexConfigManager = IjMcpCodexConfigManager()
     private val targetId = UUID.randomUUID().toString()
     private val authManager = IjMcpTargetAuthManager(
         targetId = targetId,
@@ -99,16 +103,22 @@ class IjMcpProjectRuntimeService(
             authManager.bootstrapLegacyToken(legacyToken)
             secretStore.storeLegacyToken(null)
         }
+        val trustedToken = if (settings.autoTrustLocalClients) {
+            authManager.ensureTrustedToken()
+        } else {
+            null
+        }
 
         val desiredConfiguration = IjMcpServerConfig(
             port = settings.port,
         )
 
         if (desiredConfiguration == activeConfiguration && server.isRunning) {
+            configureLocalAgent(status, trustedToken)
             return status
         }
 
-        return start(desiredConfiguration)
+        return start(desiredConfiguration, trustedToken)
     }
 
     override fun dispose() {
@@ -121,7 +131,10 @@ class IjMcpProjectRuntimeService(
         }
     }
 
-    private fun start(config: IjMcpServerConfig): IjMcpTargetStatus {
+    private fun start(
+        config: IjMcpServerConfig,
+        trustedToken: String?,
+    ): IjMcpTargetStatus {
         return try {
             if (server.isRunning) {
                 server.stop()
@@ -139,6 +152,7 @@ class IjMcpProjectRuntimeService(
             activeConfiguration = config.copy(port = boundPort)
             status = nextStatus
             publishRegistration()
+            configureLocalAgent(nextStatus, trustedToken)
             scheduleHeartbeat()
             logger.info("IJ-MCP target ${descriptor.targetId} started on ${nextStatus.endpointUrl}")
             nextStatus
@@ -213,6 +227,31 @@ class IjMcpProjectRuntimeService(
             appService.targetRegistryStore().upsert(status)
         }.onFailure { exception ->
             logger.warn("Failed to publish IJ-MCP target ${descriptor.targetId} to the local registry", exception)
+        }
+    }
+
+    private fun configureLocalAgent(
+        nextStatus: IjMcpTargetStatus,
+        trustedToken: String?,
+    ) {
+        if (trustedToken.isNullOrBlank()) {
+            return
+        }
+
+        runCatching {
+            agentGatewayStateStore.trustTarget(
+                targetId = descriptor.targetId,
+                bearerToken = trustedToken,
+            )
+
+            if (settingsService.snapshot().manageCodexConfig) {
+                codexConfigManager.ensureManagedHttpServer(
+                    endpointUrl = nextStatus.endpointUrl,
+                    bearerToken = trustedToken,
+                )
+            }
+        }.onFailure { exception ->
+            logger.warn("Failed to configure local IJ-MCP agent access for ${descriptor.targetId}", exception)
         }
     }
 

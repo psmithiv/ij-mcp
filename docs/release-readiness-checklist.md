@@ -26,9 +26,10 @@ The approved v1 scope is:
 ## 2. Installed IntelliJ Gate
 
 - [ ] The plugin installs through `Install Plugin from Disk...`.
-- [ ] A real project window can enable `Enable local MCP server` and start the target.
-- [ ] The settings page shows current `Plugin Build`, `Compatibility`, `Operator Guidance`, `Registry Status`, `Registry File`, `Registry Entry`, `Runtime Identity`, and `Last Error`.
+- [ ] A real project window starts IJ-MCP without requiring a settings change.
+- [ ] The settings page shows current `Connection`, `Plugin Build`, `Compatibility`, `Operator Guidance`, `Registry Status`, `Registry File`, `Registry Entry`, `Runtime Identity`, and `Last Error`.
 - [ ] The installed instance registers a live target entry in `~/.ij-mcp/targets.json`.
+- [ ] The installed instance writes a managed Codex `ij-mcp` entry for the local project endpoint.
 
 Reference:
 
@@ -38,17 +39,16 @@ Reference:
 ## 3. Direct CLI Routing Gate
 
 - [ ] `targets list` shows active project-window targets.
-- [ ] `targets select <targetId>` marks the intended target as sticky.
-- [ ] `targets current` reports the correct `routeStatus` and recovery fields for selected, unpaired, stale, and repair-required states.
-- [ ] `targets pair --code <pairingCode>` succeeds against the intended target.
-- [ ] `mcp tools-list` succeeds after pairing and stays bound to the selected target only.
+- [ ] `targets current` reports the automatically trusted selected target for the current project.
+- [ ] `mcp tools-list` succeeds without manually running `targets select` or `targets pair`.
+- [ ] Manual `targets select` and `targets pair --code <pairingCode>` still work as advanced recovery paths.
 
-## 4. Coding-Agent Gateway Gate
+## 4. Codex Happy-Path Gate
 
-- [ ] `gateway config` reports the stable endpoint, token, selected target, and route status.
-- [ ] `gateway serve` exposes a healthy local gateway on `http://127.0.0.1:3765/mcp`.
-- [ ] The gateway health endpoint reports `routingMode=sticky-selected-target`.
-- [ ] A validated coding-agent client can connect through the gateway, not the per-window IntelliJ endpoint.
+- [ ] A clean Codex config receives a managed `[mcp_servers.ij-mcp]` section.
+- [ ] Launching `codex` from the project directory exposes IJ-MCP tools.
+- [ ] Asking Codex to open or reveal a file controls the already-open IntelliJ project window.
+- [ ] No setup step requires copying a target id, pairing code, token export, or `gateway serve` command.
 - [ ] `./scripts/validate-agent-gateway-flow.sh` succeeds and IntelliJ reveals and opens the validation file in the selected project window.
 
 Reference:

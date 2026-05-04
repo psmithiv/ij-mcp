@@ -23,6 +23,8 @@ internal object IjMcpAgentSetupSummaryBuilder {
         targetStatus: IjMcpTargetStatus?,
         pairingCode: IssuedPairingCode?,
         gatewaySelection: IjMcpAgentGatewaySelection? = null,
+        autoTrustLocalClients: Boolean = false,
+        manageCodexConfig: Boolean = false,
         nowProvider: () -> Instant = Instant::now,
     ): IjMcpAgentSetupSummary {
         val activeCode = pairingCode?.takeUnless { nowProvider().isAfter(it.expiresAt) }
@@ -41,13 +43,22 @@ internal object IjMcpAgentSetupSummaryBuilder {
 
         val guidance = when {
             targetStatus == null ->
-                "Open a normal project window, enable IJ-MCP, pair a target from the companion CLI, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
+                "Open the project in IntelliJ, then launch `codex` from that project terminal."
 
             !targetStatus.running ->
-                "Start the selected target, pair it from the companion CLI, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
+                "Click Apply or reopen the project so IJ-MCP can connect Codex to this IntelliJ window."
+
+            autoTrustLocalClients && manageCodexConfig && !targetStatus.requiresPairing ->
+                "Ready. Launch `codex` from this project terminal and ask it to open a file."
+
+            autoTrustLocalClients && !targetStatus.requiresPairing ->
+                "This IntelliJ window is trusted locally. Add the Codex MCP entry or enable managed Codex config."
 
             activeCode != null ->
                 "Pair the selected target with `./gradlew :cli:run --args='targets pair --code ${activeCode.code} ${targetStatus.descriptor.targetId}'`, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
+
+            autoTrustLocalClients ->
+                "Click Apply to create local Codex trust for this IntelliJ window."
 
             selectedTargetId != null && selectedTargetId != currentTargetId ->
                 "Select this project target with `$selectCurrentTargetCommand`, then restart `$IJ_MCP_GATEWAY_SERVE_COMMAND` so agent requests route to this IntelliJ window."
@@ -56,13 +67,13 @@ internal object IjMcpAgentSetupSummaryBuilder {
                 "Select this project target with `$selectCurrentTargetCommand`, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND` so agent requests route to this IntelliJ window."
 
             targetStatus.requiresPairing ->
-                "Generate a pairing code for target ${targetStatus.descriptor.targetId}, pair it from the companion CLI, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
+                "Advanced setup only: generate a pairing code for target ${targetStatus.descriptor.targetId}, pair it from the companion CLI, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
 
             gatewaySelection != null && !gatewaySelection.hasCredentialForSelectedTarget ->
                 "The CLI selected target ${targetStatus.descriptor.targetId}, but it has no stored credential. Generate a pairing code, pair the target from the companion CLI, then run `$IJ_MCP_GATEWAY_SERVE_COMMAND`."
 
             else ->
-                "Run `$IJ_MCP_GATEWAY_SERVE_COMMAND`, export the gateway token below, and add the exact MCP entry below to your coding agent."
+                "Advanced setup only: run `$IJ_MCP_GATEWAY_SERVE_COMMAND`, export the gateway token below, and add the exact MCP entry below to your coding agent."
         }
 
         val readiness = when {

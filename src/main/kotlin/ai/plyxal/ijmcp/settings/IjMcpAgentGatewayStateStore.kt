@@ -70,6 +70,23 @@ internal class IjMcpAgentGatewayStateStore(
         )
     }
 
+    fun trustTarget(
+        targetId: String,
+        bearerToken: String,
+    ) {
+        if (targetId.isBlank() || bearerToken.isBlank()) {
+            return
+        }
+
+        val state = load()
+        save(
+            state.copy(
+                selectedTargetId = targetId,
+                credentialsByTargetId = state.credentialsByTargetId + (targetId to bearerToken),
+            ),
+        )
+    }
+
     fun stateFile(): Path = stateFile
 
     private fun load(): IjMcpAgentClientState {

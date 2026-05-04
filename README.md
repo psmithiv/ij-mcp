@@ -48,23 +48,26 @@ To install `IJ-MCP` into a normal IntelliJ IDEA instance:
 
 * build `build/distributions/ij-mcp-<version>.zip`
 * install the zip with `Install Plugin from Disk...`
-* open a project window, search `Settings` / `Preferences` for `IJ-MCP`, and
-  enable `Enable local MCP server`
+* open a project window
+* launch `codex` from that project's terminal
 
 Detailed steps:
 
 * [Install IJ-MCP from disk](docs/install-from-disk.md)
 
-## Operator Happy Path
+## Happy Path
 
 The shortest end-to-end local setup flow is:
 
 1. Install `build/distributions/ij-mcp-<version>.zip` into IntelliJ IDEA.
-2. Open a normal project window, search Settings for `IJ-MCP`, enable the local MCP server, and click `Apply`.
-3. Run `./gradlew :cli:run --args='targets list'` and `./gradlew :cli:run --args='targets select <targetId>'`.
-4. Generate a one-time pairing code in the plugin UI, then run `./gradlew :cli:run --args='targets pair --code <pairingCode>'`.
-5. Verify direct access with `./gradlew :cli:run --args='mcp tools-list'`.
-6. If you want agent access, print the stable endpoint with `./gradlew :cli:run --args='gateway config'` and start it with `./gradlew :cli:run --args='gateway serve'`.
+2. Open a normal project window.
+3. Launch `codex` from that project directory.
+4. Ask Codex to open or reveal a file in IntelliJ.
+
+By default, IJ-MCP starts for normal project windows, creates local-only trust
+for the current user, and writes a managed `ij-mcp` MCP entry into Codex config.
+The old target selection, pairing-code, and gateway commands remain available as
+advanced diagnostics and recovery tools.
 
 For repeated coding-agent actions, prefer the gateway endpoint over one-off
 `./gradlew :cli:run --args='mcp call ...'` commands. Keeping `gateway serve`
@@ -88,6 +91,9 @@ Detailed policy:
 The v1 implementation currently covers:
 
 * one MCP target per IntelliJ project window
+* default-on project startup for installed plugin users
+* managed Codex MCP config for the local IntelliJ project endpoint
+* automatic local trust for same-user Codex and CLI access
 * local registry discovery and sticky CLI target selection
 * pair-once authentication with per-target bearer tokens
 * MCP lifecycle and `tools/list` / `tools/call`
@@ -97,9 +103,10 @@ The v1 implementation currently covers:
 * Project view, Gradle, go-to, structure, run/debug/services, diagnostics, VCS, and IDE context navigation tools
 * fail-closed behavior for missing auth, stale target selection, and outside-project file access
 
-## CLI
+## Advanced CLI
 
-The repo now includes a dedicated `cli` subproject for local target discovery and MCP routing.
+The repo includes a dedicated `cli` subproject for diagnostics, manual recovery,
+and low-level MCP routing. Normal Codex setup should not require these commands.
 
 Supported commands:
 

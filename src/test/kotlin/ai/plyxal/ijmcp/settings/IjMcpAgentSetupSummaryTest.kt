@@ -57,14 +57,34 @@ class IjMcpAgentSetupSummaryTest {
     }
 
     @Test
+    fun trustTargetSelectsAndStoresCredentialForLocalCliCompatibility() {
+        val tempRoot = Files.createTempDirectory("ijmcp-agent-config")
+        val stateFile = tempRoot.resolve("client-state.json")
+        val store = IjMcpAgentGatewayStateStore(stateFile = stateFile)
+
+        store.trustTarget(
+            targetId = "target-a",
+            bearerToken = "target-token",
+        )
+
+        val state = Files.readString(stateFile)
+        assertTrue(state.contains("\"selectedTargetId\": \"target-a\""))
+        assertTrue(state.contains("\"target-a\": \"target-token\""))
+    }
+
+    @Test
+    fun settingsDefaultToZeroSetupCodexConnection() {
+        val state = IjMcpSettingsState()
+
+        assertTrue(state.enabled)
+        assertTrue(state.autoTrustLocalClients)
+        assertTrue(state.manageCodexConfig)
+    }
+
+    @Test
     fun buildIncludesExactCodexConfigurationAndPairCommand() {
         val summary = IjMcpAgentSetupSummaryBuilder.build(
-            gatewayConfig = IjMcpAgentGatewayConfig(
-                port = 3765,
-                bearerToken = "gateway-token",
-                endpointUrl = "http://127.0.0.1:3765/mcp",
-                healthUrl = "http://127.0.0.1:3765/health",
-            ),
+            gatewayConfig = gatewayConfig(),
             targetStatus = targetStatus(requiresPairing = true),
             pairingCode = IssuedPairingCode(
                 code = "PAIR1234",
@@ -141,6 +161,22 @@ class IjMcpAgentSetupSummaryTest {
 
         assertTrue(summary.readiness.contains("has no stored credential"))
         assertTrue(summary.guidance.contains("has no stored credential"))
+    }
+
+    @Test
+    fun buildUsesSimpleReadyGuidanceWhenCodexIsManaged() {
+        val summary = IjMcpAgentSetupSummaryBuilder.build(
+            gatewayConfig = gatewayConfig(),
+            targetStatus = targetStatus(requiresPairing = false),
+            pairingCode = null,
+            autoTrustLocalClients = true,
+            manageCodexConfig = true,
+        )
+
+        assertEquals(
+            "Ready. Launch `codex` from this project terminal and ask it to open a file.",
+            summary.guidance,
+        )
     }
 
     private fun gatewayConfig(): IjMcpAgentGatewayConfig = IjMcpAgentGatewayConfig(
