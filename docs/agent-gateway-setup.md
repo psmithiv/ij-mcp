@@ -69,6 +69,11 @@ Expected result:
 * `selectedTargetId` matches `targets current`
 * `requiresAuth` is `true`
 
+Keep this process running while the coding agent is active. Agent MCP calls
+should go through this stable endpoint instead of repeated
+`./gradlew :cli:run --args='mcp call ...'` commands; the gateway keeps the JVM
+warm and caches the selected healthy target briefly after initialization.
+
 ## 3. Add The Verified Codex CLI MCP Entry
 
 The verified Codex CLI command shape is:

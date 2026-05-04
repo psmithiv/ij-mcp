@@ -21,6 +21,11 @@ internal data class IjMcpAgentGatewayConfig(
     val healthUrl: String,
 )
 
+internal data class IjMcpAgentGatewaySelection(
+    val selectedTargetId: String?,
+    val hasCredentialForSelectedTarget: Boolean,
+)
+
 internal class IjMcpAgentGatewayStateStore(
     private val stateFile: Path = defaultStateFile(),
     private val tokenFactory: () -> String = { "ijmcp-gateway-${UUID.randomUUID()}" },
@@ -51,6 +56,17 @@ internal class IjMcpAgentGatewayStateStore(
             bearerToken = normalizedToken,
             endpointUrl = "http://127.0.0.1:$normalizedPort${IjMcpProtocol.endpointPath}",
             healthUrl = "http://127.0.0.1:$normalizedPort${IjMcpProtocol.healthPath}",
+        )
+    }
+
+    fun selection(): IjMcpAgentGatewaySelection {
+        val state = load()
+        val selectedTargetId = state.selectedTargetId?.takeIf { it.isNotBlank() }
+
+        return IjMcpAgentGatewaySelection(
+            selectedTargetId = selectedTargetId,
+            hasCredentialForSelectedTarget = selectedTargetId != null &&
+                state.credentialsByTargetId[selectedTargetId]?.isNotBlank() == true,
         )
     }
 

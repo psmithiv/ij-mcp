@@ -112,6 +112,7 @@ internal class IjMcpCliGatewayServer(
                 requestBody = requestBody,
                 protocolVersionHeader = exchange.requestHeaders.getFirst("MCP-Protocol-Version"),
             ).getOrElse { exception ->
+                preflight.clearInitialization()
                 writeResponse(
                     exchange,
                     jsonRpcErrorResponse(
